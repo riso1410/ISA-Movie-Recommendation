@@ -1,56 +1,92 @@
 ISA Movie Recommendation
 ==============================
 
-Content-based movie recommender system for ISA course
+Content-based movie recommender system for ISA course (Mini-project 1).
 
-Project Organization
-------------
+Uses TF-IDF vectorization on movie metadata (genres, keywords, cast, director, plot overview) with cosine similarity and IMDB weighted rating filter to recommend similar movies.
 
-    ├── LICENSE
-    ├── Makefile           <- Makefile with commands like `make data` or `make train`
-    ├── README.md          <- The top-level README for developers using this project.
+## Quick Start
+
+### 1. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Download dataset
+
+Download [The Movies Dataset](https://www.kaggle.com/datasets/rounakbanik/the-movies-dataset) from Kaggle and place these files in `data/raw/`:
+
+- `movies_metadata.csv`
+- `credits.csv`
+- `keywords.csv`
+- `links_small.csv`
+- `ratings_small.csv`
+
+### 3. Run the Jupyter notebook
+
+```bash
+jupyter notebook notebooks/01_eda_and_preprocessing.ipynb
+```
+
+This notebook contains the full pipeline: EDA, preprocessing, iterative modeling (3 iterations), and evaluation.
+
+### 4. Run the MovieMatch web app
+
+Start the FastAPI backend (which also serves the React frontend):
+
+```bash
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Open **http://localhost:8000** in your browser.
+
+The app loads the recommender model at startup (~15 seconds), then you can:
+- Swipe right (like) or left (dislike) on movie cards
+- Use arrow keys or the buttons to swipe
+- Drag cards with your mouse
+- After 3+ likes, personalized recommendations appear in the right panel
+
+## Project Organization
+
+    ├── app
+    │   ├── main.py            <- FastAPI backend (API + static file serving)
+    │   └── static
+    │       └── index.html     <- React frontend (Tinder-style swipe UI)
+    │
     ├── data
-    │   ├── external       <- Data from third party sources.
-    │   ├── interim        <- Intermediate data that has been transformed.
-    │   ├── processed      <- The final, canonical data sets for modeling.
-    │   └── raw            <- The original, immutable data dump.
+    │   ├── processed          <- Cleaned and merged movie data
+    │   └── raw                <- Original CSVs from Kaggle
     │
-    ├── docs               <- A default Sphinx project; see sphinx-doc.org for details
+    ├── docs
+    │   └── plans              <- Design and implementation documents
     │
-    ├── models             <- Trained and serialized models, model predictions, or model summaries
+    ├── models                 <- Trained models (pickle files)
     │
-    ├── notebooks          <- Jupyter notebooks. Naming convention is a number (for ordering),
-    │                         the creator's initials, and a short `-` delimited description, e.g.
-    │                         `1.0-jqp-initial-data-exploration`.
+    ├── notebooks
+    │   └── 01_eda_and_preprocessing.ipynb  <- Full EDA + modeling + evaluation
     │
-    ├── references         <- Data dictionaries, manuals, and all other explanatory materials.
+    ├── reports
+    │   └── figures            <- Generated visualizations (8 PNG files)
     │
-    ├── reports            <- Generated analysis as HTML, PDF, LaTeX, etc.
-    │   └── figures        <- Generated graphics and figures to be used in reporting
+    ├── src                    <- Reusable Python pipeline modules
+    │   ├── data
+    │   │   └── make_dataset.py       <- Data loading, cleaning, merging
+    │   ├── features
+    │   │   └── build_features.py     <- Text cleaning, metadata soup
+    │   └── models
+    │       ├── predict_model.py      <- ContentBasedRecommender class
+    │       └── train_model.py        <- Training script
     │
-    ├── requirements.txt   <- The requirements file for reproducing the analysis environment, e.g.
-    │                         generated with `pip freeze > requirements.txt`
-    │
-    ├── setup.py           <- makes project pip installable (pip install -e .) so src can be imported
-    ├── src                <- Source code for use in this project.
-    │   ├── __init__.py    <- Makes src a Python module
-    │   │
-    │   ├── data           <- Scripts to download or generate data
-    │   │   └── make_dataset.py
-    │   │
-    │   ├── features       <- Scripts to turn raw data into features for modeling
-    │   │   └── build_features.py
-    │   │
-    │   ├── models         <- Scripts to train models and then use trained models to make
-    │   │   │                 predictions
-    │   │   ├── predict_model.py
-    │   │   └── train_model.py
-    │   │
-    │   └── visualization  <- Scripts to create exploratory and results oriented visualizations
-    │       └── visualize.py
-    │
-    └── tox.ini            <- tox file with settings for running tox; see tox.readthedocs.io
+    ├── requirements.txt
+    └── setup.py
 
+## Tech Stack
+
+- **Python 3.12**, pandas, numpy, scikit-learn
+- **FastAPI** + uvicorn (backend)
+- **React 18** via CDN (frontend, single HTML file)
+- **matplotlib**, seaborn, wordcloud (visualizations)
 
 --------
 
