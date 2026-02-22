@@ -178,11 +178,13 @@ def get_next_movie():
             if not movie_row.empty:
                 return movie_to_dict(movie_row.iloc[0])
 
-    # Fallback: popular unseen movies
-    popular = movies_df.sort_values("popularity", ascending=False)
-    for _, row in popular.iterrows():
-        if int(row["id"]) not in seen:
-            return movie_to_dict(row)
+    # Fallback: random unseen movie (weighted by popularity so good movies appear more often)
+    unseen = movies_df[~movies_df["id"].isin(seen)]
+    if not unseen.empty:
+        weights = unseen["popularity"].clip(lower=0.1)
+        weights = weights / weights.sum()
+        chosen = unseen.sample(n=1, weights=weights)
+        return movie_to_dict(chosen.iloc[0])
 
     return {"error": "No more movies to show!"}
 
