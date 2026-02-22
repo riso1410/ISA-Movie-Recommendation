@@ -10,7 +10,7 @@ Uses TF-IDF vectorization on movie metadata (genres, keywords, cast, director, p
 ### 1. Install dependencies
 
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 ### 2. Download dataset
@@ -26,7 +26,7 @@ Download [The Movies Dataset](https://www.kaggle.com/datasets/rounakbanik/the-mo
 ### 3. Run the Jupyter notebook
 
 ```bash
-jupyter notebook notebooks/01_eda_and_preprocessing.ipynb
+uv run jupyter notebook notebooks/01_eda_and_preprocessing.ipynb
 ```
 
 This notebook contains the full pipeline: EDA, preprocessing, iterative modeling (3 iterations), and evaluation.
@@ -36,7 +36,7 @@ This notebook contains the full pipeline: EDA, preprocessing, iterative modeling
 Start the FastAPI backend (which also serves the React frontend):
 
 ```bash
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 Open **http://localhost:8000** in your browser.
@@ -78,11 +78,12 @@ The app loads the recommender model at startup (~15 seconds), then you can:
     │       ├── predict_model.py      <- ContentBasedRecommender class
     │       └── train_model.py        <- Training script
     │
-    ├── requirements.txt
-    └── setup.py
+    ├── pyproject.toml
+    └── uv.lock
 
 ## Tech Stack
 
+- **uv** for dependency management
 - **Python 3.12**, pandas, numpy, scikit-learn
 - **FastAPI** + uvicorn (backend)
 - **React 18** via CDN (frontend, single HTML file)
