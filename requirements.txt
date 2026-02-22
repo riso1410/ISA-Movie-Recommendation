@@ -17,6 +17,10 @@ wordcloud>=1.9
 jupyter>=1.0
 notebook>=7.0
 
+# web app
+fastapi>=0.100
+uvicorn>=0.23
+
 # utilities
 python-dotenv>=0.5.1
 click
