@@ -645,7 +645,7 @@ wheels = [
 [[package]]
 name = "isa-movie-recommendation"
 version = "0.1.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "click" },
     { name = "fastapi" },
