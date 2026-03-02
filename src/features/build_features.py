@@ -1,27 +1,37 @@
 """
-Feature engineering: text cleaning and metadata soup construction.
+Feature engineering: per-field text cleaning for multi-vectorizer recommender.
 """
 
 
-def clean_text(text_list):
-    """Remove spaces from names to create single tokens."""
-    if isinstance(text_list, list):
-        return [str(x).lower().replace(' ', '') for x in text_list]
-    return str(text_list).lower().replace(' ', '')
+def _clean_name(name: str) -> str:
+    """Remove spaces from a name to create a single TF-IDF token."""
+    return str(name).lower().replace(' ', '')
 
 
-def create_soup(row):
-    """Combine all metadata features into a single string for TF-IDF."""
-    genres = ' '.join(clean_text(row['genres']))
-    keywords = ' '.join(clean_text(row['keywords']))
-    cast = ' '.join(clean_text(row['cast']))
-    director = ' '.join([clean_text(row['director'])] * 3)
-    overview = str(row['overview']).lower()
-    return f"{overview} {genres} {keywords} {cast} {director}"
+def _clean_name_list(names: list) -> str:
+    """Clean a list of names and join with spaces."""
+    if isinstance(names, list):
+        return ' '.join(_clean_name(n) for n in names)
+    return ''
 
 
 def build_features(smd):
-    """Add soup column to the dataframe."""
+    """Create per-field cleaned text columns for multi-vectorizer pipeline."""
     smd = smd.copy()
-    smd['soup'] = smd.apply(create_soup, axis=1)
+
+    smd['overview_clean'] = smd['overview'].fillna('').astype(str).str.lower()
+    smd['genres_str'] = smd['genres'].apply(
+        lambda x: ' '.join(str(g).lower().replace(' ', '') for g in x) if isinstance(x, list) else ''
+    )
+    smd['keywords_str'] = smd['keywords'].apply(
+        lambda x: ' '.join(str(k).lower().replace(' ', '') for k in x) if isinstance(x, list) else ''
+    )
+    smd['cast_str'] = smd['cast'].apply(_clean_name_list)
+    smd['director_str'] = smd['director'].fillna('').apply(_clean_name)
+    smd['decade'] = smd['decade'].fillna('') if 'decade' in smd.columns else ''
+    smd['language'] = smd['language'].fillna('') if 'language' in smd.columns else ''
+    smd['collection'] = smd['collection'].fillna('').apply(
+        lambda x: str(x).lower().replace(' ', '') if x else ''
+    ) if 'collection' in smd.columns else ''
+
     return smd

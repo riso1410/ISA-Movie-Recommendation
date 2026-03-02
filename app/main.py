@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from ast import literal_eval
+import pickle
 import sys
 
 # Add project root to path so we can import src modules
@@ -66,30 +67,41 @@ def startup():
             else []
         )
 
-    # Load poster paths from raw metadata
-    raw_meta = pd.read_csv(
-        data_dir / "raw" / "movies_metadata.csv",
-        low_memory=False,
-        usecols=["id", "poster_path"],
-    )
-    # Some rows have non-numeric ids (e.g. dates) – drop them
-    raw_meta = raw_meta[raw_meta["id"].apply(lambda x: str(x).isdigit())]
-    raw_meta["id"] = raw_meta["id"].astype(int)
-    raw_meta = raw_meta.drop_duplicates(subset="id")
+    # Fill NaN in text columns
+    for col in ["decade", "language", "collection", "poster_url"]:
+        if col in processed.columns:
+            processed[col] = processed[col].fillna("")
 
-    # Merge poster paths into processed data
-    processed = processed.merge(raw_meta, on="id", how="left")
-    processed["poster_url"] = processed["poster_path"].apply(
-        lambda x: f"https://image.tmdb.org/t/p/w500{x}"
-        if pd.notna(x) and str(x).startswith("/")
-        else ""
-    )
+    # Load pre-trained model if available, otherwise fit from scratch
+    model_path = PROJECT_ROOT / "models" / "recommender.pkl"
+    if model_path.exists():
+        with open(model_path, "rb") as f:
+            recommender = pickle.load(f)
+        # Ensure numeric types
+        recommender.smd = recommender.smd.reset_index(drop=True)
+        for col in ["vote_average", "vote_count", "popularity"]:
+            recommender.smd[col] = pd.to_numeric(recommender.smd[col], errors="coerce").fillna(0.0)
 
-    # Build soup features & fit recommender
-    processed = build_features(processed)
-    recommender = ContentBasedRecommender(processed)
-    recommender.fit()
-    movies_df = processed.reset_index(drop=True)
+        # Merge poster URLs: CSV poster_url first, then fallback to poster_path
+        csv_poster = processed.drop_duplicates(subset="id").set_index("id")["poster_url"]
+        recommender.smd["poster_url"] = recommender.smd["id"].map(csv_poster).fillna("")
+
+        # Fill remaining blanks from poster_path (raw TMDB metadata)
+        if "poster_path" in recommender.smd.columns:
+            missing = recommender.smd["poster_url"] == ""
+            paths = recommender.smd.loc[missing, "poster_path"].fillna("")
+            recommender.smd.loc[missing, "poster_url"] = paths.apply(
+                lambda p: f"https://image.tmdb.org/t/p/w500{p}" if p else ""
+            )
+
+        movies_df = recommender.smd.copy()
+        print(f"Loaded pre-trained model from {model_path}")
+    else:
+        processed = build_features(processed)
+        recommender = ContentBasedRecommender(processed)
+        recommender.fit()
+        movies_df = processed.reset_index(drop=True)
+        print("No pre-trained model found, fitted from scratch")
 
     print(f"Loaded {len(movies_df)} movies, recommender ready!")
 
@@ -110,7 +122,7 @@ def movie_to_dict(row) -> dict:
         "vote_count": int(row["vote_count"])
         if pd.notna(row["vote_count"])
         else 0,
-        "poster_url": str(row.get("poster_url", "")),
+        "poster_url": str(row.get("poster_url", "")) if pd.notna(row.get("poster_url", "")) else "",
     }
 
 

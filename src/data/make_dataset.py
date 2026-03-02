@@ -34,11 +34,11 @@ def clean_metadata(metadata, links_small):
 
 
 def parse_credits(credits_df):
-    """Parse cast (top 3) and director from credits."""
+    """Parse cast (top 5) and director from credits."""
     cred = credits_df.copy()
     cred['id'] = cred['id'].astype(int)
     cred['cast'] = cred['cast'].apply(
-        lambda x: [d['name'] for d in literal_eval(x)][:3] if isinstance(x, str) else []
+        lambda x: [d['name'] for d in literal_eval(x)][:5] if isinstance(x, str) else []
     )
     cred['director'] = cred['crew'].apply(
         lambda x: next(
@@ -58,6 +58,36 @@ def parse_keywords(keywords_df):
     return kw[['id', 'keywords']]
 
 
+def parse_decade(date_str: str) -> str:
+    """Extract decade token from release_date string, e.g. 'decade_1990s'."""
+    try:
+        year = int(str(date_str)[:4])
+        decade = (year // 10) * 10
+        return f'decade_{decade}s'
+    except (ValueError, TypeError):
+        return ''
+
+
+def parse_language(lang: str) -> str:
+    """Convert language code to token, e.g. 'lang_en'."""
+    if pd.isna(lang) or not str(lang).strip():
+        return ''
+    return f'lang_{str(lang).strip().lower()}'
+
+
+def parse_collection(collection_str: str) -> str:
+    """Extract collection name from belongs_to_collection JSON string."""
+    if pd.isna(collection_str) or not str(collection_str).strip():
+        return ''
+    try:
+        col = literal_eval(str(collection_str))
+        if isinstance(col, dict) and 'name' in col:
+            return col['name']
+    except (ValueError, SyntaxError):
+        pass
+    return ''
+
+
 def merge_datasets(smd, credits_parsed, keywords_parsed):
     """Merge metadata with parsed credits and keywords."""
     smd['genres'] = smd['genres'].fillna('[]').apply(literal_eval).apply(
@@ -69,6 +99,16 @@ def merge_datasets(smd, credits_parsed, keywords_parsed):
     smd['cast'] = smd['cast'].fillna('').apply(lambda x: x if isinstance(x, list) else [])
     smd['director'] = smd['director'].fillna('')
     smd['overview'] = smd['overview'].fillna('')
+
+    # Ensure numeric columns
+    for col in ['vote_average', 'vote_count', 'popularity']:
+        smd[col] = pd.to_numeric(smd[col], errors='coerce').fillna(0.0)
+
+    # Enrich with decade, language, collection
+    smd['decade'] = smd['release_date'].apply(parse_decade)
+    smd['language'] = smd['original_language'].apply(parse_language)
+    smd['collection'] = smd['belongs_to_collection'].apply(parse_collection)
+
     smd = smd[smd['title'].notna()]
     return smd
 
@@ -85,8 +125,18 @@ def make_dataset(raw_dir='data/raw', processed_dir='data/processed'):
     processed_dir.mkdir(parents=True, exist_ok=True)
 
     cols = ['id', 'title', 'overview', 'genres', 'keywords', 'cast', 'director',
-            'vote_average', 'vote_count', 'popularity']
-    smd[cols].to_csv(processed_dir / 'movies_processed.csv', index=False)
+            'vote_average', 'vote_count', 'popularity', 'decade', 'language', 'collection']
+
+    # Preserve poster_url from existing processed CSV if available
+    out_path = processed_dir / 'movies_processed.csv'
+    if out_path.exists():
+        existing = pd.read_csv(out_path)
+        if 'poster_url' in existing.columns:
+            poster_map = existing.drop_duplicates(subset='id').set_index('id')['poster_url']
+            smd['poster_url'] = smd['id'].map(poster_map).fillna('')
+            cols.append('poster_url')
+
+    smd[cols].to_csv(out_path, index=False)
     print(f"Saved {len(smd)} movies to {processed_dir / 'movies_processed.csv'}")
     return smd
 
