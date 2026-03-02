@@ -154,6 +154,97 @@ def novelty(recommender: ContentBasedRecommender,
     return float(np.mean(novelty_scores)) if novelty_scores else 0.0
 
 
+def serendipity_at_k(recommender: ContentBasedRecommender,
+                     test_movies: pd.DataFrame,
+                     popularity_scores: pd.Series,
+                     k: int = 10) -> float:
+    """Serendipity@K = mean(unexpectedness * relevance).
+    unexpectedness = 1 - normalized_popularity, relevance = genre_overlap > 0."""
+    pop_max = popularity_scores.max()
+    if pop_max == 0:
+        return 0.0
+
+    pop_norm = popularity_scores / pop_max
+    pop_by_title = pd.Series(pop_norm.values, index=recommender.smd['title'])
+    pop_by_title = pop_by_title[~pop_by_title.index.duplicated(keep='first')]
+
+    scores = []
+    for _, row in test_movies.iterrows():
+        title = row['title']
+        true_genres = row['genres'] if isinstance(row['genres'], list) else []
+        if not true_genres:
+            continue
+
+        recs = recommender.recommend(title, n=k)
+        if recs.empty:
+            continue
+
+        for _, rec_row in recs.iterrows():
+            rec_genres = rec_row['genres'] if isinstance(rec_row['genres'], list) else []
+            relevance = 1.0 if _genre_overlap(true_genres, rec_genres) > 0 else 0.0
+            p = float(pop_by_title.get(rec_row['title'], 0.5))
+            unexpectedness = 1.0 - p
+            scores.append(unexpectedness * relevance)
+
+    return float(np.mean(scores)) if scores else 0.0
+
+
+def mean_reciprocal_rank(recommender: ContentBasedRecommender,
+                         test_movies: pd.DataFrame,
+                         k: int = 10) -> float:
+    """MRR = mean(1/rank_of_first_relevant_item). Relevance = genre_overlap > 0."""
+    rr_scores = []
+
+    for _, row in test_movies.iterrows():
+        title = row['title']
+        true_genres = row['genres'] if isinstance(row['genres'], list) else []
+        if not true_genres:
+            continue
+
+        recs = recommender.recommend(title, n=k)
+        if recs.empty:
+            continue
+
+        for rank, (_, rec_row) in enumerate(recs.iterrows(), 1):
+            rec_genres = rec_row['genres'] if isinstance(rec_row['genres'], list) else []
+            if _genre_overlap(true_genres, rec_genres) > 0:
+                rr_scores.append(1.0 / rank)
+                break
+        else:
+            rr_scores.append(0.0)
+
+    return float(np.mean(rr_scores)) if rr_scores else 0.0
+
+
+def per_genre_precision(recommender: ContentBasedRecommender,
+                        test_movies: pd.DataFrame,
+                        k: int = 10) -> dict[str, float]:
+    """Precision@K broken down by genre. Only genres with 3+ test movies."""
+    genre_results: dict[str, list[float]] = {}
+
+    for _, row in test_movies.iterrows():
+        title = row['title']
+        true_genres = row['genres'] if isinstance(row['genres'], list) else []
+        if not true_genres:
+            continue
+
+        recs = recommender.recommend(title, n=k)
+        if recs.empty:
+            continue
+
+        relevant = 0
+        for _, rec_row in recs.iterrows():
+            rec_genres = rec_row['genres'] if isinstance(rec_row['genres'], list) else []
+            if _genre_overlap(true_genres, rec_genres) > 0:
+                relevant += 1
+        prec = relevant / k
+
+        for g in true_genres:
+            genre_results.setdefault(g, []).append(prec)
+
+    return {g: round(float(np.mean(v)), 4) for g, v in genre_results.items() if len(v) >= 3}
+
+
 def evaluate_all(recommender: ContentBasedRecommender,
                  test_movies: pd.DataFrame,
                  k: int = 10) -> dict[str, float]:
@@ -167,6 +258,9 @@ def evaluate_all(recommender: ContentBasedRecommender,
         'coverage': coverage(recommender, test_movies, catalog_size, k),
         'intra_list_diversity': intra_list_diversity(recommender, test_movies, k),
         'novelty': novelty(recommender, test_movies, pop_scores, k),
+        'serendipity_at_k': serendipity_at_k(recommender, test_movies, pop_scores, k),
+        'mrr': mean_reciprocal_rank(recommender, test_movies, k),
+        'per_genre_precision': per_genre_precision(recommender, test_movies, k),
     }
     return results
 

@@ -165,6 +165,53 @@ class ContentBasedRecommender:
         return [(candidate_indices[i], s) for i, s in zip(selected, selected_scores)]
 
 
+    def get_model_stats(self) -> dict:
+        """Return model training metadata for analytics."""
+        stats = {
+            "total_movies": len(self.smd),
+            "field_weights": self.weights,
+            "weighted_rating_params": {
+                "C_mean_vote": round(self.C, 3),
+                "m_60th_percentile": round(self.m, 1),
+            },
+            "vectorizer_stats": {},
+            "feature_matrix_shape": list(self.feature_matrix.shape) if self.feature_matrix is not None else None,
+            "feature_matrix_sparsity": round(
+                1 - self.feature_matrix.nnz / (self.feature_matrix.shape[0] * self.feature_matrix.shape[1]), 4
+            ) if self.feature_matrix is not None else None,
+            "cosine_sim_stats": {},
+            "data_quality": {},
+        }
+
+        for field, vec in self.vectorizers.items():
+            vocab = vec.vocabulary_ if hasattr(vec, 'vocabulary_') else {}
+            stats["vectorizer_stats"][field] = {
+                "type": type(vec).__name__,
+                "vocab_size": len(vocab),
+                "weight": self.weights.get(field, 0),
+            }
+
+        if self.cosine_sim is not None:
+            upper = self.cosine_sim[np.triu_indices(len(self.cosine_sim), k=1)]
+            sample = np.random.choice(upper, size=min(100000, len(upper)), replace=False)
+            stats["cosine_sim_stats"] = {
+                "mean": round(float(np.mean(sample)), 4),
+                "median": round(float(np.median(sample)), 4),
+                "std": round(float(np.std(sample)), 4),
+                "p95": round(float(np.percentile(sample, 95)), 4),
+            }
+
+        for field, (col, _, _) in FIELD_CONFIG.items():
+            if col in self.smd.columns:
+                empty = (self.smd[col].fillna('').astype(str) == '').sum()
+                stats["data_quality"][field] = {
+                    "empty_count": int(empty),
+                    "fill_rate": round(1 - empty / len(self.smd), 3),
+                }
+
+        return stats
+
+
 def build_recommender(smd: pd.DataFrame, weights: dict[str, float] | None = None) -> ContentBasedRecommender:
     """Convenience function to build and fit the recommender."""
     recommender = ContentBasedRecommender(smd, weights=weights)

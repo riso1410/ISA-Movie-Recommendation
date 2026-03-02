@@ -75,20 +75,22 @@ def fetch_one(movie_id: int) -> str | None:
         return None
 
 
-def load_cache() -> dict[int, str]:
+def load_cache(cache_path: Path | None = None) -> dict[int, str]:
     """Load successful poster URLs from cache."""
-    if not CACHE_PATH.exists():
+    path = cache_path or CACHE_PATH
+    if not path.exists():
         return {}
-    df = pd.read_csv(CACHE_PATH)
+    df = pd.read_csv(path)
     df = df[df["poster_url"].notna() & (df["poster_url"] != "")]
     return dict(zip(df["id"].astype(int), df["poster_url"]))
 
 
-def save_cache(results: dict[int, str]) -> None:
+def save_cache(results: dict[int, str], cache_path: Path | None = None) -> None:
     """Save poster URLs to cache."""
+    path = cache_path or CACHE_PATH
     df = pd.DataFrame(list(results.items()), columns=["id", "poster_url"])
-    CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(CACHE_PATH, index=False)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path, index=False)
 
 
 def main() -> None:

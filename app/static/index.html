@@ -83,6 +83,42 @@
       .reset-btn:hover {
         background: rgba(255, 255, 255, 0.2);
       }
+      .source-badge {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        z-index: 5;
+        backdrop-filter: blur(4px);
+      }
+      .source-badge.model {
+        background: rgba(81, 207, 102, 0.25);
+        color: #51cf66;
+        border: 1px solid rgba(81, 207, 102, 0.4);
+      }
+      .source-badge.random {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+      }
+      .nav-link {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #fff;
+        padding: 8px 16px;
+        border-radius: 20px;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 13px;
+        text-decoration: none;
+        transition: all 0.3s;
+      }
+      .nav-link:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
 
       /* Main layout */
       .main-content {
@@ -321,6 +357,101 @@
         color: #ffd43b;
       }
 
+      /* Rec card overlay */
+      .rec-card {
+        position: relative;
+      }
+      .rec-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        opacity: 0;
+        transition: opacity 0.2s;
+        border-radius: 12px;
+        z-index: 5;
+      }
+      .rec-card:hover .rec-overlay {
+        opacity: 1;
+      }
+      .rec-overlay-btn {
+        width: 45px;
+        height: 45px;
+        border-radius: 50%;
+        border: 2px solid;
+        background: rgba(0, 0, 0, 0.4);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        transition: all 0.2s;
+      }
+      .rec-overlay-btn.like {
+        border-color: #51cf66;
+        color: #51cf66;
+      }
+      .rec-overlay-btn.like:hover {
+        background: #51cf66;
+        color: #fff;
+        transform: scale(1.15);
+      }
+      .rec-overlay-btn.dislike {
+        border-color: #ff6b6b;
+        color: #ff6b6b;
+      }
+      .rec-overlay-btn.dislike:hover {
+        background: #ff6b6b;
+        color: #fff;
+        transform: scale(1.15);
+      }
+
+      /* Rec card flash animations */
+      .rec-card.flash-like {
+        animation: recFlashLike 0.4s ease forwards;
+      }
+      .rec-card.flash-dislike {
+        animation: recFlashDislike 0.4s ease forwards;
+      }
+      @keyframes recFlashLike {
+        0% {
+          box-shadow: 0 0 0 0 rgba(81, 207, 102, 0.6);
+          transform: scale(1);
+          opacity: 1;
+        }
+        40% {
+          box-shadow: 0 0 20px 4px rgba(81, 207, 102, 0.4);
+          transform: scale(0.95);
+        }
+        100% {
+          box-shadow: 0 0 0 0 transparent;
+          transform: scale(0.8);
+          opacity: 0;
+        }
+      }
+      @keyframes recFlashDislike {
+        0% {
+          box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.6);
+          transform: scale(1);
+          opacity: 1;
+        }
+        40% {
+          box-shadow: 0 0 20px 4px rgba(255, 107, 107, 0.4);
+          transform: scale(0.95);
+        }
+        100% {
+          box-shadow: 0 0 0 0 transparent;
+          transform: scale(0.8);
+          opacity: 0;
+        }
+      }
+
       /* Loading state */
       .loading {
         display: flex;
@@ -420,6 +551,8 @@
         const [stats, setStats] = useState({ liked: 0, disliked: 0 });
         const [exitDir, setExitDir] = useState(null);
         const [dragX, setDragX] = useState(0);
+        const [feedbackId, setFeedbackId] = useState(null);
+        const [feedbackDir, setFeedbackDir] = useState(null);
         const isDragging = useRef(false);
         const startX = useRef(0);
         const swiping = useRef(false);
@@ -526,6 +659,34 @@
           fetchMovie();
         };
 
+        const handleRecFeedback = useCallback(
+          async (movieId, direction) => {
+            setFeedbackId(movieId);
+            setFeedbackDir(direction);
+
+            try {
+              const res = await fetch(`${API}/api/rec-feedback`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ movie_id: movieId, direction }),
+              });
+              const data = await res.json();
+
+              setTimeout(() => {
+                setFeedbackId(null);
+                setFeedbackDir(null);
+                setRecommendations(data.recommendations || []);
+                fetchStats();
+              }, 400);
+            } catch (e) {
+              console.error(e);
+              setFeedbackId(null);
+              setFeedbackDir(null);
+            }
+          },
+          [fetchStats],
+        );
+
         const likeOpacity = Math.min(Math.max(dragX / 100, 0), 1);
         const nopeOpacity = Math.min(Math.max(-dragX / 100, 0), 1);
 
@@ -541,9 +702,14 @@
                   &#x2718; {stats.disliked}
                 </span>
               </div>
-              <button className="reset-btn" onClick={handleReset}>
-                Reset
-              </button>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <a className="nav-link" href="/dashboard">
+                  Analytics
+                </a>
+                <button className="reset-btn" onClick={handleReset}>
+                  Reset
+                </button>
+              </div>
             </header>
 
             <div className="main-content">
@@ -581,6 +747,14 @@
                       >
                         NOPE
                       </div>
+
+                      {movie.source && (
+                        <div
+                          className={`source-badge ${movie.source === "model" ? "model" : "random"}`}
+                        >
+                          {movie.source === "model" ? "AI Pick" : "Exploring"}
+                        </div>
+                      )}
 
                       {movie.poster_url ? (
                         <img
@@ -655,7 +829,10 @@
                 {recommendations.length > 0 ? (
                   <div className="rec-grid">
                     {recommendations.map((rec, i) => (
-                      <div key={rec.id || i} className="rec-card">
+                      <div
+                        key={rec.id || i}
+                        className={`rec-card${feedbackId === rec.id && feedbackDir === "right" ? " flash-like" : ""}${feedbackId === rec.id && feedbackDir === "left" ? " flash-dislike" : ""}`}
+                      >
                         {rec.poster_url ? (
                           <img
                             className="rec-poster"
@@ -672,6 +849,22 @@
                           style={rec.poster_url ? { display: "none" } : {}}
                         >
                           &#127909;
+                        </div>
+                        <div className="rec-overlay">
+                          <button
+                            className="rec-overlay-btn dislike"
+                            onClick={() => handleRecFeedback(rec.id, "left")}
+                            title="Dislike"
+                          >
+                            &#x2718;
+                          </button>
+                          <button
+                            className="rec-overlay-btn like"
+                            onClick={() => handleRecFeedback(rec.id, "right")}
+                            title="Like"
+                          >
+                            &#x2764;
+                          </button>
                         </div>
                         <div className="rec-info">
                           <div className="rec-title">{rec.title}</div>

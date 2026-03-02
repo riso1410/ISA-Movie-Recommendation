@@ -1,0 +1,3572 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MovieMatch Analytics</title>
+    <script
+      crossorigin
+      src="https://unpkg.com/react@18/umd/react.production.min.js"
+    ></script>
+    <script
+      crossorigin
+      src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"
+    ></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Poppins", sans-serif;
+        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+        min-height: 100vh;
+        color: #fff;
+        overflow-x: hidden;
+      }
+
+      .app-container {
+        max-width: 1300px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px 0;
+        margin-bottom: 8px;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .logo {
+        font-size: 26px;
+        font-weight: 700;
+        background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .header-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .nav-link,
+      .action-btn-hdr {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #fff;
+        padding: 8px 16px;
+        border-radius: 20px;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 13px;
+        text-decoration: none;
+        transition: all 0.2s;
+        display: inline-block;
+      }
+      .nav-link:hover,
+      .action-btn-hdr:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      .export-btn {
+        background: rgba(255, 107, 107, 0.15);
+        border: 1px solid rgba(255, 107, 107, 0.4);
+        color: #ff6b6b;
+      }
+      .export-btn:hover {
+        background: rgba(255, 107, 107, 0.25);
+      }
+
+      /* Tab bar */
+      .tab-bar {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+      }
+
+      .tab-btn {
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.45);
+        padding: 10px 18px;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        border-bottom: 3px solid transparent;
+        transition: all 0.2s;
+        white-space: nowrap;
+      }
+      .tab-btn:hover {
+        color: rgba(255, 255, 255, 0.75);
+      }
+      .tab-btn.active {
+        color: #fff;
+        border-bottom-color: #ff6b6b;
+      }
+
+      /* Glass card */
+      .glass-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+      }
+
+      /* KPI cards row */
+      .kpi-row {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 24px;
+      }
+
+      .kpi-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        min-width: 180px;
+        flex: 1;
+        text-align: center;
+      }
+
+      .kpi-value {
+        font-size: 36px;
+        font-weight: 700;
+        line-height: 1.1;
+        margin-bottom: 4px;
+      }
+
+      .kpi-label {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.5);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      /* Charts grid */
+      .charts-row {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+      }
+
+      .chart-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        flex: 1;
+        min-width: 280px;
+      }
+
+      .chart-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.8);
+        margin-bottom: 14px;
+      }
+
+      /* Confusion matrix table */
+      .cm-container {
+        margin-bottom: 0;
+      }
+
+      .cm-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        margin-bottom: 16px;
+      }
+      .cm-table th,
+      .cm-table td {
+        padding: 10px 14px;
+        text-align: center;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .cm-table th {
+        color: rgba(255, 255, 255, 0.5);
+        font-weight: 600;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+      .cm-tp {
+        background: rgba(81, 207, 102, 0.2);
+        color: #51cf66;
+        font-size: 22px;
+        font-weight: 700;
+      }
+      .cm-fp {
+        background: rgba(255, 107, 107, 0.15);
+        color: #ff6b6b;
+        font-size: 22px;
+        font-weight: 700;
+      }
+      .cm-fn {
+        background: rgba(255, 107, 107, 0.1);
+        color: rgba(255, 107, 107, 0.7);
+        font-size: 22px;
+        font-weight: 700;
+      }
+      .cm-tn {
+        background: rgba(255, 255, 255, 0.05);
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 22px;
+        font-weight: 700;
+      }
+      .cm-row-label {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .derived-metrics {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .derived-metric {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        padding: 10px 16px;
+        text-align: center;
+        flex: 1;
+      }
+      .derived-metric-val {
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .derived-metric-lbl {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.45);
+        text-transform: uppercase;
+      }
+
+      /* Model lift gauge */
+      .lift-gauge {
+        text-align: center;
+        padding: 30px 20px;
+      }
+      .lift-value {
+        font-size: 72px;
+        font-weight: 700;
+        line-height: 1;
+        margin-bottom: 8px;
+      }
+      .lift-value.good {
+        color: #51cf66;
+      }
+      .lift-value.bad {
+        color: #ff6b6b;
+      }
+      .lift-desc {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.55);
+        max-width: 260px;
+        margin: 0 auto;
+        line-height: 1.5;
+      }
+
+      /* Vectorizer table */
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .data-table th {
+        padding: 10px 12px;
+        text-align: left;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.45);
+        font-size: 11px;
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+      .data-table td {
+        padding: 9px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        color: rgba(255, 255, 255, 0.85);
+      }
+      .data-table tr:last-child td {
+        border-bottom: none;
+      }
+      .data-table tr:hover td {
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .fill-bar-wrap {
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 4px;
+        height: 6px;
+        width: 100%;
+        min-width: 80px;
+      }
+      .fill-bar {
+        height: 6px;
+        border-radius: 4px;
+      }
+
+      /* Offline metric cards */
+      .metric-grid {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 24px;
+      }
+
+      .metric-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        flex: 1;
+        min-width: 160px;
+        text-align: center;
+      }
+      .metric-card-name {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.45);
+        margin-bottom: 8px;
+        letter-spacing: 0.5px;
+      }
+      .metric-card-value {
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .metric-quality-bar-wrap {
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 4px;
+        height: 5px;
+        width: 100%;
+        margin-bottom: 8px;
+      }
+      .metric-quality-bar {
+        height: 5px;
+        border-radius: 4px;
+      }
+      .metric-card-desc {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.4);
+        line-height: 1.4;
+      }
+
+      /* Spinner */
+      .spinner-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 60px 20px;
+        gap: 12px;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 15px;
+      }
+      .spinner {
+        width: 36px;
+        height: 36px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-top-color: #ff6b6b;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        flex-shrink: 0;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Empty state */
+      .empty-state {
+        text-align: center;
+        padding: 50px 20px;
+        color: rgba(255, 255, 255, 0.35);
+        font-size: 14px;
+      }
+
+      .section-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.55);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 12px;
+      }
+
+      /* Stat summary cards in score tab */
+      .stat-summary-row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+      }
+      .stat-summary-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 14px 18px;
+        flex: 1;
+        min-width: 130px;
+      }
+      .stat-summary-title {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.45);
+        text-transform: uppercase;
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .stat-summary-val {
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      /* Feature matrix cards */
+      .matrix-cards {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+      }
+      .matrix-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 16px 20px;
+        flex: 1;
+        min-width: 150px;
+        text-align: center;
+      }
+      .matrix-card-val {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 4px;
+      }
+      .matrix-card-lbl {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.45);
+        text-transform: uppercase;
+      }
+
+      /* Poll indicator */
+      .poll-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #51cf66;
+        display: inline-block;
+        margin-right: 6px;
+        animation: pulse 2s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.3;
+        }
+      }
+
+      /* Info tooltip */
+      .info-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 1.5px solid rgba(255, 255, 255, 0.25);
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 11px;
+        font-weight: 700;
+        font-style: italic;
+        font-family: Georgia, serif;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: all 0.2s;
+        user-select: none;
+        line-height: 1;
+        vertical-align: middle;
+        margin-left: 6px;
+        position: relative;
+      }
+      .info-icon:hover {
+        border-color: rgba(255, 255, 255, 0.5);
+        color: rgba(255, 255, 255, 0.7);
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .info-tooltip-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9998;
+      }
+      .info-tooltip {
+        position: fixed;
+        z-index: 9999;
+        background: #1a1640;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 10px;
+        padding: 16px 18px;
+        max-width: 380px;
+        min-width: 240px;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+        font-size: 13px;
+        line-height: 1.65;
+        color: rgba(255, 255, 255, 0.85);
+        pointer-events: auto;
+      }
+      .info-tooltip-title {
+        font-weight: 700;
+        font-size: 13px;
+        color: #ff6b6b;
+        margin-bottom: 8px;
+      }
+      .info-tooltip p {
+        margin: 0 0 8px 0;
+      }
+      .info-tooltip p:last-child {
+        margin-bottom: 0;
+      }
+      .info-tooltip strong {
+        color: #fff;
+      }
+      .info-tooltip .tip-example {
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 6px;
+        padding: 8px 10px;
+        font-size: 12px;
+        margin: 8px 0;
+        color: rgba(255, 255, 255, 0.7);
+      }
+      .info-tooltip .tip-good {
+        color: #51cf66;
+      }
+      .info-tooltip .tip-warn {
+        color: #ffd43b;
+      }
+      .info-tooltip .tip-bad {
+        color: #ff6b6b;
+      }
+
+      /* Operations tab */
+      .ops-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      .ops-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .ops-card-title {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .ops-card-desc {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.45);
+        line-height: 1.4;
+        flex: 1;
+      }
+      .ops-btn {
+        background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+        border: none;
+        color: #fff;
+        padding: 10px 18px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.2s;
+        width: 100%;
+      }
+      .ops-btn:hover:not(:disabled) {
+        opacity: 0.85;
+      }
+      .ops-btn:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
+      .ops-btn.secondary {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      .ops-btn.danger {
+        background: linear-gradient(135deg, #e74c3c, #c0392b);
+      }
+      .ops-progress-wrap {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 24px;
+      }
+      .ops-progress-bar-bg {
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 6px;
+        height: 10px;
+        width: 100%;
+        margin: 10px 0 8px 0;
+        overflow: hidden;
+      }
+      .ops-progress-bar {
+        height: 10px;
+        border-radius: 6px;
+        background: linear-gradient(90deg, #ff6b6b, #ee5a24);
+        transition: width 0.3s;
+      }
+      .ops-progress-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .ops-progress-msg {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.5);
+      }
+      .ops-status {
+        font-size: 12px;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 10px;
+        display: inline-block;
+      }
+      .ops-status.running {
+        background: rgba(255, 193, 7, 0.2);
+        color: #ffc107;
+      }
+      .ops-status.completed {
+        background: rgba(81, 207, 102, 0.2);
+        color: #51cf66;
+      }
+      .ops-status.error {
+        background: rgba(255, 107, 107, 0.2);
+        color: #ff6b6b;
+      }
+
+      .weight-editor {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 24px;
+      }
+      .weight-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+      .weight-label {
+        width: 90px;
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.7);
+        font-weight: 600;
+      }
+      .weight-slider {
+        flex: 1;
+        -webkit-appearance: none;
+        height: 6px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.15);
+        outline: none;
+      }
+      .weight-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #ff6b6b;
+        cursor: pointer;
+      }
+      .weight-val {
+        width: 40px;
+        text-align: right;
+        font-size: 13px;
+        font-weight: 700;
+        color: #ff6b6b;
+      }
+
+      .gs-results-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        margin-top: 12px;
+      }
+      .gs-results-table th {
+        padding: 10px 12px;
+        text-align: left;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.45);
+        font-size: 11px;
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+      .gs-results-table td {
+        padding: 9px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        color: rgba(255, 255, 255, 0.85);
+      }
+      .gs-results-table tr.gs-best td {
+        background: rgba(81, 207, 102, 0.08);
+        color: #51cf66;
+        font-weight: 600;
+      }
+
+      @media (max-width: 700px) {
+        .kpi-card {
+          min-width: 140px;
+        }
+        .chart-card {
+          min-width: 100%;
+        }
+        .tab-btn {
+          padding: 9px 12px;
+          font-size: 12px;
+        }
+        .ops-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel">
+      const { useState, useEffect, useRef, useCallback } = React;
+
+      // ---------------------------------------------------------------------------
+      // ChartComponent — imperative Chart.js wrapper
+      // ---------------------------------------------------------------------------
+      function ChartComponent({ type, data, options, height = 300 }) {
+        const canvasRef = useRef(null);
+        const chartRef = useRef(null);
+
+        useEffect(() => {
+          if (!canvasRef.current) return;
+          if (chartRef.current) {
+            chartRef.current.destroy();
+            chartRef.current = null;
+          }
+          const ctx = canvasRef.current.getContext("2d");
+          chartRef.current = new Chart(ctx, { type, data, options });
+          return () => {
+            if (chartRef.current) {
+              chartRef.current.destroy();
+              chartRef.current = null;
+            }
+          };
+        }, [type, data, options]);
+
+        return <canvas ref={canvasRef} style={{ maxHeight: height + "px" }} />;
+      }
+
+      // ---------------------------------------------------------------------------
+      // Dark chart defaults
+      // ---------------------------------------------------------------------------
+      const CHART_DEFAULTS = {
+        plugins: {
+          legend: {
+            labels: {
+              color: "rgba(255,255,255,0.7)",
+              font: { family: "Poppins", size: 12 },
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: {
+              color: "rgba(255,255,255,0.6)",
+              font: { family: "Poppins", size: 11 },
+            },
+            grid: { color: "rgba(255,255,255,0.07)" },
+          },
+          y: {
+            ticks: {
+              color: "rgba(255,255,255,0.6)",
+              font: { family: "Poppins", size: 11 },
+            },
+            grid: { color: "rgba(255,255,255,0.07)" },
+          },
+        },
+        responsive: true,
+        maintainAspectRatio: true,
+      };
+
+      function mergeDeep(base, override) {
+        const out = { ...base };
+        for (const k in override) {
+          if (
+            override[k] &&
+            typeof override[k] === "object" &&
+            !Array.isArray(override[k])
+          ) {
+            out[k] = mergeDeep(base[k] || {}, override[k]);
+          } else {
+            out[k] = override[k];
+          }
+        }
+        return out;
+      }
+
+      function chartOpts(extra = {}) {
+        return mergeDeep(CHART_DEFAULTS, extra);
+      }
+
+      // ---------------------------------------------------------------------------
+      // Utilities
+      // ---------------------------------------------------------------------------
+      function pct(v) {
+        return (v * 100).toFixed(1) + "%";
+      }
+      function round2(v) {
+        return typeof v === "number" ? v.toFixed(2) : "—";
+      }
+
+      function computeHistogram(values, bins = 10) {
+        if (!values || values.length === 0) return { labels: [], counts: [] };
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        if (min === max)
+          return { labels: [min.toFixed(3)], counts: [values.length] };
+        const step = (max - min) / bins;
+        const counts = Array(bins).fill(0);
+        const labels = [];
+        for (let i = 0; i < bins; i++) {
+          labels.push((min + i * step).toFixed(3));
+        }
+        for (const v of values) {
+          let idx = Math.floor((v - min) / step);
+          if (idx >= bins) idx = bins - 1;
+          counts[idx]++;
+        }
+        return { labels, counts };
+      }
+
+      function buildCumulativeLR(swipeLog, source) {
+        const entries = swipeLog.filter((e) => e.source === source);
+        const pts = [];
+        let likes = 0;
+        for (let i = 0; i < entries.length; i++) {
+          if (entries[i].direction === "right") likes++;
+          pts.push({ x: entries[i].swipe_index, y: likes / (i + 1) });
+        }
+        return pts;
+      }
+
+      // ---------------------------------------------------------------------------
+      // InfoTip — click-to-toggle info icon with positioned tooltip
+      // ---------------------------------------------------------------------------
+      function InfoTip({ title, children }) {
+        const [open, setOpen] = useState(false);
+        const iconRef = useRef(null);
+        const [pos, setPos] = useState({ top: 0, left: 0 });
+
+        const handleClick = (e) => {
+          e.stopPropagation();
+          if (!open && iconRef.current) {
+            const r = iconRef.current.getBoundingClientRect();
+            const tooltipW = 360;
+            let left = r.left + r.width / 2 - tooltipW / 2;
+            if (left < 12) left = 12;
+            if (left + tooltipW > window.innerWidth - 12)
+              left = window.innerWidth - tooltipW - 12;
+            let top = r.bottom + 8;
+            if (top + 200 > window.innerHeight) top = r.top - 8;
+            setPos({
+              top,
+              left,
+              anchorBelow: r.bottom + 8 <= window.innerHeight - 100,
+            });
+          }
+          setOpen(!open);
+        };
+
+        return (
+          <React.Fragment>
+            <span className="info-icon" ref={iconRef} onClick={handleClick}>
+              i
+            </span>
+            {open && (
+              <React.Fragment>
+                <div
+                  className="info-tooltip-overlay"
+                  onClick={() => setOpen(false)}
+                />
+                <div
+                  className="info-tooltip"
+                  style={{ top: pos.top, left: pos.left }}
+                >
+                  {title && <div className="info-tooltip-title">{title}</div>}
+                  {children}
+                </div>
+              </React.Fragment>
+            )}
+          </React.Fragment>
+        );
+      }
+
+      // ---------------------------------------------------------------------------
+      // Tab 1: Session Overview
+      // ---------------------------------------------------------------------------
+      function TabSession({ analytics }) {
+        if (!analytics || analytics.total_swipes === 0) {
+          return (
+            <div className="empty-state">
+              No swipes yet. Go swipe some movies!
+            </div>
+          );
+        }
+
+        const { total_swipes, like_rates, confusion, swipe_buckets } =
+          analytics;
+
+        const bucketLabels = swipe_buckets.map(
+          (b) => `${b.start + 1}-${b.end}`,
+        );
+        const bucketLR = swipe_buckets.map(
+          (b) => +(b.like_rate * 100).toFixed(1),
+        );
+        const bucketColors = swipe_buckets.map((b) => {
+          const modelFrac =
+            b.model_count / (b.model_count + b.random_count || 1);
+          const g = Math.round(80 + modelFrac * 127);
+          return `rgba(51,${g},102,0.75)`;
+        });
+
+        const bucketData = {
+          labels: bucketLabels,
+          datasets: [
+            {
+              label: "Like Rate %",
+              data: bucketLR,
+              backgroundColor: bucketColors,
+              borderColor: bucketColors.map((c) => c.replace("0.75", "1")),
+              borderWidth: 1,
+              borderRadius: 4,
+            },
+          ],
+        };
+
+        const bucketOpts = chartOpts({
+          scales: {
+            y: {
+              min: 0,
+              max: 100,
+              ticks: { callback: (v) => v + "%" },
+              title: {
+                display: true,
+                text: "Like Rate (%)",
+                color: "rgba(255,255,255,0.5)",
+                font: { size: 11 },
+              },
+            },
+            x: {
+              title: {
+                display: true,
+                text: "Swipe Range",
+                color: "rgba(255,255,255,0.5)",
+                font: { size: 11 },
+              },
+            },
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `Like rate: ${ctx.parsed.y}%`,
+                afterLabel: (ctx) => {
+                  const b = swipe_buckets[ctx.dataIndex];
+                  return `Model: ${b.model_count}, Random: ${b.random_count}`;
+                },
+              },
+            },
+          },
+        });
+
+        const liftColor =
+          (like_rates.model_lift || 0) >= 1 ? "#51cf66" : "#ff6b6b";
+
+        return (
+          <div>
+            <div className="kpi-row">
+              <div className="kpi-card">
+                <div className="kpi-value">{total_swipes}</div>
+                <div className="kpi-label">
+                  Total Swipes
+                  <InfoTip title="Total Swipes">
+                    <p>
+                      The total number of movies you have swiped on (both likes
+                      and dislikes) in this session.
+                    </p>
+                    <p>
+                      More swipes give the recommendation model more data about
+                      your preferences, which typically improves its
+                      suggestions.
+                    </p>
+                  </InfoTip>
+                </div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-value" style={{ color: "#51cf66" }}>
+                  {pct(like_rates.overall || 0)}
+                </div>
+                <div className="kpi-label">
+                  Like Rate
+                  <InfoTip title="Like Rate">
+                    <p>
+                      The percentage of all swiped movies that you liked (swiped
+                      right).
+                    </p>
+                    <p>
+                      <strong>Example:</strong> 20 movies swiped, 8 liked = 40%
+                      like rate.
+                    </p>
+                    <p>
+                      This combines both random movies and model
+                      recommendations. A rising like rate over time usually
+                      means the model is learning your taste.
+                    </p>
+                    <div className="tip-example">Typical range: 20%-60%.</div>
+                  </InfoTip>
+                </div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-value" style={{ color: liftColor }}>
+                  {round2(like_rates.model_lift)}x
+                </div>
+                <div className="kpi-label">
+                  Model Lift
+                  <InfoTip title="Model Lift">
+                    <p>
+                      How many times better the recommendation model is at
+                      finding movies you like, compared to showing random
+                      movies.
+                    </p>
+                    <p>
+                      <strong>Formula:</strong> Model Like Rate / Random Like
+                      Rate
+                    </p>
+                    <p>
+                      <span className="tip-good">Above 1.0x</span> = model
+                      outperforms random.{" "}
+                      <span className="tip-bad">Below 1.0x</span> = model
+                      underperforms (needs more data).
+                    </p>
+                    <div className="tip-example">
+                      A lift of 2.5x means the model finds movies you like 2.5
+                      times more often than random picks.
+                    </div>
+                  </InfoTip>
+                </div>
+              </div>
+              <div className="kpi-card">
+                <div className="kpi-value" style={{ color: "#74c0fc" }}>
+                  {pct(confusion.precision || 0)}
+                </div>
+                <div className="kpi-label">
+                  Rec Precision
+                  <InfoTip title="Recommendation Precision">
+                    <p>
+                      Of all the movies the model recommended, what percentage
+                      did you actually like?
+                    </p>
+                    <p>
+                      Only counts movies shown by the model (not random ones).
+                      Measures how accurate the model's predictions are.
+                    </p>
+                    <p>
+                      <span className="tip-good">&gt;70%</span> Excellent &nbsp;{" "}
+                      <span className="tip-warn">40-70%</span> Learning &nbsp;{" "}
+                      <span className="tip-bad">&lt;40%</span> Needs more data
+                    </p>
+                  </InfoTip>
+                </div>
+              </div>
+            </div>
+
+            <div className="charts-row">
+              <div className="chart-card" style={{ flex: 2, minWidth: 340 }}>
+                <div className="chart-title">
+                  Like Rate by Swipe Bucket (groups of 5)
+                  <InfoTip title="Like Rate by Swipe Bucket">
+                    <p>
+                      Your swipes are grouped into buckets of 5. Each bar shows
+                      the like rate (% of likes) within that group.
+                    </p>
+                    <p>
+                      <strong>What to look for:</strong> Bars getting taller
+                      over time means the model is improving its recommendations
+                      as it learns from your swipes.
+                    </p>
+                    <p>
+                      Bar color changes from darker (random phase) to lighter
+                      (model phase) showing when the AI started recommending.
+                    </p>
+                  </InfoTip>
+                </div>
+                {swipe_buckets.length > 0 ? (
+                  <ChartComponent
+                    type="bar"
+                    data={bucketData}
+                    options={bucketOpts}
+                    height={280}
+                  />
+                ) : (
+                  <div className="empty-state">Not enough swipes yet.</div>
+                )}
+              </div>
+              <div className="chart-card" style={{ flex: 1, minWidth: 260 }}>
+                <div className="chart-title">
+                  Confusion Matrix
+                  <InfoTip title="Confusion Matrix">
+                    <p>A 2x2 scorecard for the recommendation model.</p>
+                    <p>
+                      <strong className="tip-good">TP (True Positive):</strong>{" "}
+                      Model recommended it, you liked it — a win!
+                    </p>
+                    <p>
+                      <strong className="tip-bad">FP (False Positive):</strong>{" "}
+                      Model recommended it, you disliked it — wrong guess.
+                    </p>
+                    <p>
+                      <strong className="tip-bad">FN (False Negative):</strong>{" "}
+                      Random movie you liked — the model missed this one.
+                    </p>
+                    <p>
+                      <strong>TN (True Negative):</strong> Random movie you
+                      disliked — correctly not recommended.
+                    </p>
+                    <div className="tip-example">
+                      Ideal: high TP, low FP. The model should recommend movies
+                      you actually enjoy.
+                    </div>
+                  </InfoTip>
+                </div>
+                <div className="cm-container">
+                  <table className="cm-table">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <th>Predicted Liked</th>
+                        <th>Predicted Disliked</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="cm-row-label">Actually Liked</td>
+                        <td className="cm-tp">
+                          <div>{confusion.tp ?? "—"}</div>
+                          <div
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 400,
+                              color: "rgba(81,207,102,0.7)",
+                            }}
+                          >
+                            TP
+                          </div>
+                        </td>
+                        <td className="cm-fn">
+                          <div>{confusion.fn ?? "—"}</div>
+                          <div
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 400,
+                              color: "rgba(255,107,107,0.6)",
+                            }}
+                          >
+                            FN
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="cm-row-label">Actually Disliked</td>
+                        <td className="cm-fp">
+                          <div>{confusion.fp ?? "—"}</div>
+                          <div
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 400,
+                              color: "rgba(255,107,107,0.7)",
+                            }}
+                          >
+                            FP
+                          </div>
+                        </td>
+                        <td className="cm-tn">
+                          <div>{confusion.tn ?? "—"}</div>
+                          <div style={{ fontSize: 11, fontWeight: 400 }}>
+                            TN
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div className="derived-metrics">
+                    <div className="derived-metric">
+                      <div
+                        className="derived-metric-val"
+                        style={{ color: "#74c0fc" }}
+                      >
+                        {pct(confusion.precision || 0)}
+                      </div>
+                      <div className="derived-metric-lbl">
+                        Precision
+                        <InfoTip title="Precision">
+                          <p>
+                            Of the movies the model recommended, how many did
+                            you like? <strong>TP / (TP + FP)</strong>
+                          </p>
+                          <p>
+                            High precision = fewer bad recommendations. The
+                            model is careful about what it suggests.
+                          </p>
+                        </InfoTip>
+                      </div>
+                    </div>
+                    <div className="derived-metric">
+                      <div
+                        className="derived-metric-val"
+                        style={{ color: "#ffd43b" }}
+                      >
+                        {pct(confusion.recall || 0)}
+                      </div>
+                      <div className="derived-metric-lbl">
+                        Recall
+                        <InfoTip title="Recall">
+                          <p>
+                            Of all movies you liked (from any source), how many
+                            came from the model? <strong>TP / (TP + FN)</strong>
+                          </p>
+                          <p>
+                            High recall = the model catches most movies you'd
+                            enjoy, rather than you having to find them randomly.
+                          </p>
+                        </InfoTip>
+                      </div>
+                    </div>
+                    <div className="derived-metric">
+                      <div
+                        className="derived-metric-val"
+                        style={{ color: "#da77f2" }}
+                      >
+                        {pct(confusion.f1 || 0)}
+                      </div>
+                      <div className="derived-metric-lbl">
+                        F1
+                        <InfoTip title="F1 Score">
+                          <p>
+                            The harmonic mean of Precision and Recall — a single
+                            number that balances both.
+                          </p>
+                          <p>
+                            <strong>Formula:</strong> 2 × (Precision × Recall) /
+                            (Precision + Recall)
+                          </p>
+                          <p>
+                            F1 is useful because a model could have high
+                            precision (only recommends "safe" picks) but low
+                            recall (misses many good movies), or vice versa. F1
+                            penalizes extreme imbalance.
+                          </p>
+                          <div className="tip-example">
+                            <span className="tip-good">&gt;70%</span> = Great
+                            balance. <span className="tip-warn">40-70%</span> =
+                            Decent. <span className="tip-bad">&lt;40%</span> =
+                            Needs work.
+                          </div>
+                        </InfoTip>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // ---------------------------------------------------------------------------
+      // Tab 2: Model vs Random
+      // ---------------------------------------------------------------------------
+      function TabModelVsRandom({ analytics }) {
+        if (!analytics || analytics.total_swipes === 0) {
+          return <div className="empty-state">No swipes yet.</div>;
+        }
+
+        const { like_rates, swipe_log } = analytics;
+
+        const randomLR = +((like_rates.random || 0) * 100).toFixed(1);
+        const modelLR = +((like_rates.model || 0) * 100).toFixed(1);
+
+        const randomSwipes = swipe_log.filter((e) => e.source === "random");
+        const modelSwipes = swipe_log.filter((e) => e.source === "model");
+
+        const phaseData = {
+          labels: ["Random Phase", "Model Phase"],
+          datasets: [
+            {
+              label: "Like Rate %",
+              data: [randomLR, modelLR],
+              backgroundColor: [
+                "rgba(255,255,255,0.15)",
+                "rgba(81,207,102,0.55)",
+              ],
+              borderColor: ["rgba(255,255,255,0.4)", "rgba(81,207,102,0.9)"],
+              borderWidth: 2,
+              borderRadius: 6,
+            },
+          ],
+        };
+
+        const phaseOpts = chartOpts({
+          scales: {
+            y: {
+              min: 0,
+              max: 100,
+              ticks: { callback: (v) => v + "%" },
+            },
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `Like rate: ${ctx.parsed.y}%`,
+                afterLabel: (ctx) => {
+                  const cnt =
+                    ctx.dataIndex === 0
+                      ? randomSwipes.length
+                      : modelSwipes.length;
+                  return `${cnt} swipes`;
+                },
+              },
+            },
+          },
+        });
+
+        // Cumulative like rate timeline
+        const randomCum = buildCumulativeLR(swipe_log, "random");
+        const modelCum = buildCumulativeLR(swipe_log, "model");
+
+        const timelineData = {
+          datasets: [
+            {
+              label: "Random (cumulative LR)",
+              data: randomCum,
+              borderColor: "rgba(255,255,255,0.55)",
+              backgroundColor: "rgba(255,255,255,0.05)",
+              tension: 0.3,
+              pointRadius: 0,
+              fill: false,
+            },
+            {
+              label: "Model (cumulative LR)",
+              data: modelCum,
+              borderColor: "rgba(81,207,102,0.9)",
+              backgroundColor: "rgba(81,207,102,0.08)",
+              tension: 0.3,
+              pointRadius: 0,
+              fill: false,
+            },
+          ],
+        };
+
+        const timelineOpts = chartOpts({
+          scales: {
+            x: {
+              type: "linear",
+              title: {
+                display: true,
+                text: "Swipe Index",
+                color: "rgba(255,255,255,0.5)",
+                font: { size: 11 },
+              },
+            },
+            y: {
+              min: 0,
+              max: 1,
+              ticks: { callback: (v) => (v * 100).toFixed(0) + "%" },
+              title: {
+                display: true,
+                text: "Cumulative Like Rate",
+                color: "rgba(255,255,255,0.5)",
+                font: { size: 11 },
+              },
+            },
+          },
+        });
+
+        const liftVal = like_rates.model_lift || 0;
+        const liftColor = liftVal >= 1 ? "good" : "bad";
+        const liftDesc =
+          liftVal >= 2
+            ? `The model recommends movies you like ${liftVal.toFixed(1)}x more often than random selection.`
+            : liftVal >= 1
+              ? `The model outperforms random by ${((liftVal - 1) * 100).toFixed(0)}%. Keep swiping for better data.`
+              : "Not enough model swipes yet to show lift, or model is underperforming random.";
+
+        return (
+          <div>
+            <div className="charts-row">
+              <div className="chart-card" style={{ flex: 1, minWidth: 220 }}>
+                <div className="chart-title">
+                  Phase Comparison
+                  <InfoTip title="Phase Comparison">
+                    <p>
+                      Compares your like rate during two phases of the
+                      experience:
+                    </p>
+                    <p>
+                      <strong>Random Phase:</strong> The first ~3 swipes where
+                      movies are picked randomly (weighted by popularity) to
+                      learn your initial preferences.
+                    </p>
+                    <p>
+                      <strong>Model Phase:</strong> After 3 likes, the AI
+                      recommendation model takes over and suggests movies based
+                      on your taste profile.
+                    </p>
+                    <p>
+                      If the model is working well, the Model Phase bar should
+                      be noticeably taller than the Random Phase bar.
+                    </p>
+                  </InfoTip>
+                </div>
+                <ChartComponent
+                  type="bar"
+                  data={phaseData}
+                  options={phaseOpts}
+                  height={240}
+                />
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 12,
+                    marginTop: 12,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div className="stat-summary-card" style={{ flex: 1 }}>
+                    <div className="stat-summary-title">Random Swipes</div>
+                    <div className="stat-summary-val">
+                      {randomSwipes.length}
+                    </div>
+                  </div>
+                  <div className="stat-summary-card" style={{ flex: 1 }}>
+                    <div className="stat-summary-title">Model Swipes</div>
+                    <div className="stat-summary-val">{modelSwipes.length}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="chart-card" style={{ flex: 1, minWidth: 200 }}>
+                <div className="chart-title">
+                  Model Lift
+                  <InfoTip title="Model Lift (Detail)">
+                    <p>
+                      The central metric showing how much better the AI model is
+                      than random chance at picking movies you'll like.
+                    </p>
+                    <p>
+                      <strong>Calculation:</strong> (Like rate when model
+                      recommends) / (Like rate for random movies)
+                    </p>
+                    <p>
+                      <span className="tip-good">2.0x+</span> = Excellent — the
+                      model has learned your taste very well.
+                    </p>
+                    <p>
+                      <span className="tip-warn">1.0-2.0x</span> = Model is
+                      helping but has room to improve. Keep swiping!
+                    </p>
+                    <p>
+                      <span className="tip-bad">&lt;1.0x</span> = Model needs
+                      more data. The first few model recommendations may not be
+                      great.
+                    </p>
+                  </InfoTip>
+                </div>
+                <div className="lift-gauge">
+                  <div className={`lift-value ${liftColor}`}>
+                    {liftVal.toFixed(1)}x
+                  </div>
+                  <div className="lift-desc">{liftDesc}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="chart-card">
+              <div className="chart-title">
+                Cumulative Like Rate Timeline
+                <InfoTip title="Cumulative Like Rate Timeline">
+                  <p>
+                    Two lines showing how each source's like rate evolves over
+                    time as you swipe more movies.
+                  </p>
+                  <p>
+                    <strong>White line (Random):</strong> Running average of
+                    likes among randomly-shown movies.
+                  </p>
+                  <p>
+                    <strong>Green line (Model):</strong> Running average of
+                    likes among model-recommended movies.
+                  </p>
+                  <p>
+                    <strong>What to look for:</strong> The green line should be
+                    above the white line. The gap between them represents the
+                    model's advantage. If the green line trends upward, the
+                    model is improving over time.
+                  </p>
+                </InfoTip>
+              </div>
+              {randomCum.length > 1 || modelCum.length > 1 ? (
+                <ChartComponent
+                  type="line"
+                  data={timelineData}
+                  options={timelineOpts}
+                  height={280}
+                />
+              ) : (
+                <div className="empty-state">
+                  Not enough data for timeline yet.
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      // ---------------------------------------------------------------------------
+      // Tab 3: Genre & Popularity
+      // ---------------------------------------------------------------------------
+      function TabGenrePopularity({ analytics }) {
+        if (!analytics || analytics.total_swipes === 0) {
+          return <div className="empty-state">No swipes yet.</div>;
+        }
+
+        const { genre_distribution, popularity } = analytics;
+
+        // Top 15 genres by total count
+        const genreEntries = Object.entries(genre_distribution)
+          .map(([g, v]) => ({
+            genre: g,
+            liked: v.liked,
+            disliked: v.disliked,
+            total: v.liked + v.disliked,
+          }))
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 15);
+
+        const genreDistData = {
+          labels: genreEntries.map((e) => e.genre),
+          datasets: [
+            {
+              label: "Liked",
+              data: genreEntries.map((e) => e.liked),
+              backgroundColor: "rgba(81,207,102,0.7)",
+              borderColor: "rgba(81,207,102,0.9)",
+              borderWidth: 1,
+              borderRadius: 3,
+            },
+            {
+              label: "Disliked",
+              data: genreEntries.map((e) => e.disliked),
+              backgroundColor: "rgba(255,107,107,0.6)",
+              borderColor: "rgba(255,107,107,0.85)",
+              borderWidth: 1,
+              borderRadius: 3,
+            },
+          ],
+        };
+
+        const genreDistOpts = chartOpts({
+          indexAxis: "y",
+          scales: {
+            x: { stacked: true },
+            y: { stacked: true },
+          },
+          plugins: {
+            legend: { position: "top" },
+          },
+        });
+
+        // Genre like rate (3+ swipes)
+        const genreLR = Object.entries(genre_distribution)
+          .map(([g, v]) => ({
+            genre: g,
+            total: v.liked + v.disliked,
+            lr: v.liked / (v.liked + v.disliked),
+          }))
+          .filter((e) => e.total >= 3)
+          .sort((a, b) => b.lr - a.lr);
+
+        const genreLRData = {
+          labels: genreLR.map((e) => e.genre),
+          datasets: [
+            {
+              label: "Like Rate",
+              data: genreLR.map((e) => +(e.lr * 100).toFixed(1)),
+              backgroundColor: genreLR.map((e) =>
+                e.lr >= 0.6
+                  ? "rgba(81,207,102,0.7)"
+                  : e.lr >= 0.35
+                    ? "rgba(255,212,59,0.65)"
+                    : "rgba(255,107,107,0.65)",
+              ),
+              borderWidth: 0,
+              borderRadius: 3,
+            },
+          ],
+        };
+
+        const genreLROpts = chartOpts({
+          indexAxis: "y",
+          scales: {
+            x: { min: 0, max: 100, ticks: { callback: (v) => v + "%" } },
+          },
+          plugins: { legend: { display: false } },
+        });
+
+        const popData = {
+          labels: ["Liked Avg", "Disliked Avg", "Catalog Avg"],
+          datasets: [
+            {
+              label: "Popularity",
+              data: [
+                popularity.liked_avg,
+                popularity.disliked_avg,
+                popularity.catalog_avg,
+              ],
+              backgroundColor: [
+                "rgba(81,207,102,0.65)",
+                "rgba(255,107,107,0.65)",
+                "rgba(116,192,252,0.65)",
+              ],
+              borderColor: [
+                "rgba(81,207,102,0.9)",
+                "rgba(255,107,107,0.9)",
+                "rgba(116,192,252,0.9)",
+              ],
+              borderWidth: 2,
+              borderRadius: 5,
+            },
+          ],
+        };
+
+        const popOpts = chartOpts({
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: "Popularity Score",
+                color: "rgba(255,255,255,0.5)",
+                font: { size: 11 },
+              },
+            },
+          },
+          plugins: { legend: { display: false } },
+        });
+
+        return (
+          <div>
+            <div className="charts-row">
+              <div className="chart-card" style={{ flex: 2, minWidth: 320 }}>
+                <div className="chart-title">
+                  Genre Distribution — Liked vs Disliked (Top 15)
+                  <InfoTip title="Genre Distribution">
+                    <p>
+                      A stacked horizontal bar chart showing how many movies you
+                      liked (green) vs disliked (red) in each genre.
+                    </p>
+                    <p>
+                      <strong>How to read it:</strong> Each bar represents one
+                      genre. The longer the green portion relative to red, the
+                      more you enjoy that genre.
+                    </p>
+                    <p>
+                      Movies can belong to multiple genres (e.g., a movie can be
+                      both "Action" and "Sci-Fi"), so the same movie may appear
+                      in multiple bars.
+                    </p>
+                    <p>
+                      Only the top 15 genres by total swipe count are shown.
+                    </p>
+                  </InfoTip>
+                </div>
+                {genreEntries.length > 0 ? (
+                  <ChartComponent
+                    type="bar"
+                    data={genreDistData}
+                    options={genreDistOpts}
+                    height={320}
+                  />
+                ) : (
+                  <div className="empty-state">No genre data yet.</div>
+                )}
+              </div>
+              <div className="chart-card" style={{ flex: 1, minWidth: 220 }}>
+                <div className="chart-title">
+                  Popularity Comparison
+                  <InfoTip title="Popularity Comparison">
+                    <p>
+                      Compares the average TMDB popularity score of movies you
+                      liked, disliked, and the overall catalog.
+                    </p>
+                    <p>
+                      <strong>Popularity</strong> is a TMDB metric reflecting
+                      how often a movie is searched and discussed. Higher = more
+                      mainstream.
+                    </p>
+                    <p>
+                      If "Liked" is much higher than "Catalog Avg," you prefer
+                      blockbusters. If similar or lower, you lean toward
+                      niche/indie films.
+                    </p>
+                  </InfoTip>
+                </div>
+                <ChartComponent
+                  type="bar"
+                  data={popData}
+                  options={popOpts}
+                  height={220}
+                />
+                <div
+                  style={{
+                    marginTop: 12,
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.4)",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  Higher = more popular on TMDB. Compare your preferences vs
+                  catalog average.
+                </div>
+              </div>
+            </div>
+
+            {genreLR.length > 0 && (
+              <div className="chart-card">
+                <div className="chart-title">
+                  Genre Like Rate (genres with 3+ swipes, sorted by preference)
+                  <InfoTip title="Genre Like Rate">
+                    <p>
+                      For each genre, what percentage of movies did you like?
+                      Only genres with 3+ swipes shown.
+                    </p>
+                    <p>
+                      <strong>Color coding:</strong>{" "}
+                      <span className="tip-good">Green (&gt;60%)</span> = love
+                      it. <span className="tip-warn">Yellow (35-60%)</span> =
+                      mixed. <span className="tip-bad">Red (&lt;35%)</span> =
+                      not your thing.
+                    </p>
+                    <p>
+                      Sorted from highest to lowest preference — your favorite
+                      genres at the top.
+                    </p>
+                  </InfoTip>
+                </div>
+                <ChartComponent
+                  type="bar"
+                  data={genreLRData}
+                  options={genreLROpts}
+                  height={Math.max(200, genreLR.length * 26)}
+                />
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // ---------------------------------------------------------------------------
+      // Tab 4: Score Analysis
+      // ---------------------------------------------------------------------------
+      function TabScoreAnalysis({ analytics }) {
+        if (!analytics || analytics.total_swipes === 0) {
+          return <div className="empty-state">No swipes yet.</div>;
+        }
+
+        const { score_distributions, calibration } = analytics;
+        const liked = score_distributions.liked || [];
+        const disliked = score_distributions.disliked || [];
+
+        const hasScores = liked.length > 0 || disliked.length > 0;
+
+        const allVals = [...liked, ...disliked];
+        const binCount = 12;
+        let histLabels = [];
+        let likedCounts = [];
+        let dislikedCounts = [];
+
+        if (allVals.length > 0) {
+          const minV = Math.min(...allVals);
+          const maxV = Math.max(...allVals);
+          const step = (maxV - minV) / binCount || 0.01;
+          histLabels = Array.from({ length: binCount }, (_, i) =>
+            (minV + i * step).toFixed(3),
+          );
+
+          const bin = (vals) => {
+            const cnt = Array(binCount).fill(0);
+            for (const v of vals) {
+              let idx = Math.floor((v - minV) / step);
+              if (idx >= binCount) idx = binCount - 1;
+              if (idx < 0) idx = 0;
+              cnt[idx]++;
+            }
+            return cnt;
+          };
+          likedCounts = bin(liked);
+          dislikedCounts = bin(disliked);
+        }
+
+        const histData = {
+          labels: histLabels,
+          datasets: [
+            {
+              label: "Liked",
+              data: likedCounts,
+              backgroundColor: "rgba(81,207,102,0.55)",
+              borderColor: "rgba(81,207,102,0.85)",
+              borderWidth: 1,
+            },
+            {
+              label: "Disliked",
+              data: dislikedCounts,
+              backgroundColor: "rgba(255,107,107,0.45)",
+              borderColor: "rgba(255,107,107,0.8)",
+              borderWidth: 1,
+            },
+          ],
+        };
+
+        const histOpts = chartOpts({
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: "Similarity Score",
+                color: "rgba(255,255,255,0.5)",
+                font: { size: 11 },
+              },
+            },
+            y: {
+              title: {
+                display: true,
+                text: "Count",
+                color: "rgba(255,255,255,0.5)",
+                font: { size: 11 },
+              },
+            },
+          },
+          plugins: { legend: { position: "top" } },
+        });
+
+        const calData = {
+          labels: calibration.map((c) => c.bin),
+          datasets: [
+            {
+              label: "Like Rate",
+              data: calibration.map((c) => +(c.like_rate * 100).toFixed(1)),
+              borderColor: "rgba(116,192,252,0.9)",
+              backgroundColor: "rgba(116,192,252,0.1)",
+              tension: 0.3,
+              pointBackgroundColor: "rgba(116,192,252,0.9)",
+              pointRadius: 5,
+              fill: true,
+            },
+          ],
+        };
+
+        const calOpts = chartOpts({
+          scales: {
+            x: {
+              title: {
+                display: true,
+                text: "Score Bin",
+                color: "rgba(255,255,255,0.5)",
+                font: { size: 11 },
+              },
+            },
+            y: {
+              min: 0,
+              max: 100,
+              ticks: { callback: (v) => v + "%" },
+              title: {
+                display: true,
+                text: "Like Rate (%)",
+                color: "rgba(255,255,255,0.5)",
+                font: { size: 11 },
+              },
+            },
+          },
+          plugins: { legend: { display: false } },
+        });
+
+        const mean = (arr) =>
+          arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+        const median = (arr) => {
+          if (!arr.length) return null;
+          const s = [...arr].sort((a, b) => a - b);
+          const m = Math.floor(s.length / 2);
+          return s.length % 2 !== 0 ? s[m] : (s[m - 1] + s[m]) / 2;
+        };
+
+        const likedMean = mean(liked);
+        const likedMedian = median(liked);
+        const dislikedMean = mean(disliked);
+        const dislikedMedian = median(disliked);
+
+        return (
+          <div>
+            <div className="stat-summary-row">
+              <div className="stat-summary-card">
+                <div
+                  className="stat-summary-title"
+                  style={{ color: "rgba(81,207,102,0.7)" }}
+                >
+                  Liked — Mean Score
+                  <InfoTip title="Similarity Score Statistics">
+                    <p>
+                      These four cards show the average and median{" "}
+                      <strong>similarity scores</strong> for movies you liked vs
+                      disliked (only from model recommendations).
+                    </p>
+                    <p>
+                      <strong>Similarity score</strong> (0 to 1) measures how
+                      similar a recommended movie is to movies you've already
+                      liked. Higher = more similar content.
+                    </p>
+                    <p>
+                      <strong>Mean</strong> = average of all scores.{" "}
+                      <strong>Median</strong> = the middle value (less affected
+                      by outliers).
+                    </p>
+                    <p>
+                      <strong>What to look for:</strong> The "Liked" scores
+                      should be higher than "Disliked" scores. If they are, the
+                      model's similarity calculation is a good predictor of your
+                      preferences.
+                    </p>
+                    <div className="tip-example">
+                      A large gap (e.g., Liked=0.45 vs Disliked=0.25) means the
+                      similarity score is highly predictive.
+                    </div>
+                  </InfoTip>
+                </div>
+                <div className="stat-summary-val" style={{ color: "#51cf66" }}>
+                  {likedMean !== null ? likedMean.toFixed(4) : "—"}
+                </div>
+              </div>
+              <div className="stat-summary-card">
+                <div
+                  className="stat-summary-title"
+                  style={{ color: "rgba(81,207,102,0.7)" }}
+                >
+                  Liked — Median Score
+                </div>
+                <div className="stat-summary-val" style={{ color: "#51cf66" }}>
+                  {likedMedian !== null ? likedMedian.toFixed(4) : "—"}
+                </div>
+              </div>
+              <div className="stat-summary-card">
+                <div
+                  className="stat-summary-title"
+                  style={{ color: "rgba(255,107,107,0.7)" }}
+                >
+                  Disliked — Mean Score
+                </div>
+                <div className="stat-summary-val" style={{ color: "#ff6b6b" }}>
+                  {dislikedMean !== null ? dislikedMean.toFixed(4) : "—"}
+                </div>
+              </div>
+              <div className="stat-summary-card">
+                <div
+                  className="stat-summary-title"
+                  style={{ color: "rgba(255,107,107,0.7)" }}
+                >
+                  Disliked — Median Score
+                </div>
+                <div className="stat-summary-val" style={{ color: "#ff6b6b" }}>
+                  {dislikedMedian !== null ? dislikedMedian.toFixed(4) : "—"}
+                </div>
+              </div>
+            </div>
+
+            <div className="charts-row">
+              <div className="chart-card" style={{ flex: 1, minWidth: 280 }}>
+                <div className="chart-title">
+                  Score Distribution — Liked vs Disliked (Model Recs)
+                  <InfoTip title="Score Distribution Histogram">
+                    <p>
+                      This histogram shows how similarity scores are distributed
+                      for movies you <strong>liked</strong> (green) versus
+                      <strong>disliked</strong> (red) during the model phase.
+                    </p>
+                    <p>
+                      <strong>How to read it:</strong> The x-axis shows score
+                      ranges (buckets), and the y-axis shows how many movies
+                      fell into each bucket. Ideally, the green (liked) bars
+                      should cluster toward the right (higher scores) and the
+                      red (disliked) bars toward the left (lower scores).
+                    </p>
+                    <p>
+                      <strong>What the scores mean:</strong> Each score combines
+                      cosine similarity (how similar a movie's content is to
+                      movies you liked) with its quality rating. Scores range
+                      from 0 to 1, where 1 means a perfect content match with a
+                      top-rated movie.
+                    </p>
+                    <div className="tip-good">
+                      Good: Clear separation — liked movies cluster at higher
+                      scores than disliked ones.
+                    </div>
+                    <div className="tip-warn">
+                      Okay: Some overlap but liked movies still skew higher.
+                    </div>
+                    <div className="tip-bad">
+                      Bad: Complete overlap — the model can't distinguish your
+                      preferences from scores alone.
+                    </div>
+                  </InfoTip>
+                </div>
+                {hasScores ? (
+                  <ChartComponent
+                    type="bar"
+                    data={histData}
+                    options={histOpts}
+                    height={280}
+                  />
+                ) : (
+                  <div className="empty-state">
+                    No model recommendation scores yet. Keep swiping until the
+                    model phase begins.
+                  </div>
+                )}
+              </div>
+              <div className="chart-card" style={{ flex: 1, minWidth: 260 }}>
+                <div className="chart-title">
+                  Score Calibration — Higher Score Should Mean More Likes
+                  <InfoTip title="Score Calibration Chart">
+                    <p>
+                      This chart tests whether the model's scores are
+                      <strong>well-calibrated</strong> — meaning movies with
+                      higher scores actually get liked more often.
+                    </p>
+                    <p>
+                      <strong>How it works:</strong> All model-recommended
+                      movies are sorted by their score and grouped into buckets.
+                      For each bucket, the chart shows the like rate (percentage
+                      of movies in that bucket you liked). The x-axis shows
+                      score ranges, the y-axis shows like rate.
+                    </p>
+                    <p>
+                      <strong>Ideal result:</strong> An upward-sloping line from
+                      left to right — low-score movies have a low like rate,
+                      high-score movies have a high like rate. This means you
+                      can trust the score: a 0.8 is genuinely better than a 0.4.
+                    </p>
+                    <div className="tip-good">
+                      Good: Steady upward trend — scores reliably predict likes.
+                    </div>
+                    <div className="tip-warn">
+                      Okay: Generally upward but with some dips — scores are
+                      useful but not perfectly predictive.
+                    </div>
+                    <div className="tip-bad">
+                      Bad: Flat or erratic line — the score ranking doesn't
+                      correlate with your actual preferences.
+                    </div>
+                  </InfoTip>
+                </div>
+                {calibration.length >= 2 ? (
+                  <ChartComponent
+                    type="line"
+                    data={calData}
+                    options={calOpts}
+                    height={280}
+                  />
+                ) : (
+                  <div className="empty-state">
+                    Not enough calibration data yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // ---------------------------------------------------------------------------
+      // Tab 5: Model Training
+      // ---------------------------------------------------------------------------
+      function TabModelTraining({ modelStats, loadingModel, fetchModelStats }) {
+        useEffect(() => {
+          if (!modelStats && !loadingModel) fetchModelStats();
+        }, []);
+
+        if (loadingModel) {
+          return (
+            <div className="spinner-wrap">
+              <div className="spinner"></div>
+              Loading model stats...
+            </div>
+          );
+        }
+
+        if (!modelStats) {
+          return <div className="empty-state">Model stats unavailable.</div>;
+        }
+
+        const {
+          field_weights = {},
+          vectorizer_stats = {},
+          feature_matrix_shape = [],
+          feature_matrix_sparsity = 0,
+          cosine_sim_stats = {},
+          data_quality = {},
+          weighted_rating_params = {},
+          similarity_histogram = null,
+        } = modelStats;
+
+        // Radar chart for field weights
+        const radarLabels = Object.keys(field_weights);
+        const radarVals = Object.values(field_weights);
+
+        const radarData = {
+          labels: radarLabels,
+          datasets: [
+            {
+              label: "Field Weight",
+              data: radarVals,
+              borderColor: "rgba(255,107,107,0.9)",
+              backgroundColor: "rgba(255,107,107,0.15)",
+              pointBackgroundColor: "rgba(255,107,107,0.9)",
+              pointRadius: 4,
+              borderWidth: 2,
+            },
+          ],
+        };
+
+        const radarOpts = {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              labels: {
+                color: "rgba(255,255,255,0.7)",
+                font: { family: "Poppins", size: 12 },
+              },
+            },
+          },
+          scales: {
+            r: {
+              ticks: {
+                color: "rgba(255,255,255,0.5)",
+                backdropColor: "transparent",
+                font: { size: 10 },
+              },
+              grid: { color: "rgba(255,255,255,0.1)" },
+              pointLabels: {
+                color: "rgba(255,255,255,0.7)",
+                font: { size: 11, family: "Poppins" },
+              },
+              angleLines: { color: "rgba(255,255,255,0.08)" },
+            },
+          },
+        };
+
+        // Cosine similarity histogram
+        let simHistData = null;
+        let simHistOpts = null;
+        if (similarity_histogram) {
+          const { counts, edges } = similarity_histogram;
+          const labels = edges.slice(0, -1).map((e) => e.toFixed(4));
+          simHistData = {
+            labels,
+            datasets: [
+              {
+                label: "Pair Count",
+                data: counts,
+                backgroundColor: "rgba(116,192,252,0.5)",
+                borderColor: "rgba(116,192,252,0.8)",
+                borderWidth: 1,
+                borderRadius: 2,
+              },
+            ],
+          };
+          simHistOpts = chartOpts({
+            scales: {
+              x: {
+                title: {
+                  display: true,
+                  text: "Cosine Similarity",
+                  color: "rgba(255,255,255,0.5)",
+                  font: { size: 11 },
+                },
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: "Pair Count",
+                  color: "rgba(255,255,255,0.5)",
+                  font: { size: 11 },
+                },
+              },
+            },
+            plugins: {
+              legend: { display: false },
+              annotation: {},
+            },
+          });
+        }
+
+        // Data quality bars fill rate
+        const qualityFields = Object.entries(data_quality).sort(
+          (a, b) => a[1].fill_rate - b[1].fill_rate,
+        );
+
+        const fillRateData = {
+          labels: qualityFields.map(([f]) => f),
+          datasets: [
+            {
+              label: "Fill Rate %",
+              data: qualityFields.map(
+                ([, v]) => +(v.fill_rate * 100).toFixed(1),
+              ),
+              backgroundColor: qualityFields.map(([, v]) =>
+                v.fill_rate >= 0.8
+                  ? "rgba(81,207,102,0.65)"
+                  : v.fill_rate >= 0.5
+                    ? "rgba(255,212,59,0.65)"
+                    : "rgba(255,107,107,0.65)",
+              ),
+              borderWidth: 0,
+              borderRadius: 3,
+            },
+          ],
+        };
+
+        const fillRateOpts = chartOpts({
+          indexAxis: "y",
+          scales: {
+            x: { min: 0, max: 100, ticks: { callback: (v) => v + "%" } },
+          },
+          plugins: { legend: { display: false } },
+        });
+
+        const rows = Math.max(feature_matrix_shape[0] || 0);
+        const cols = Math.max(feature_matrix_shape[1] || 0);
+
+        return (
+          <div>
+            <div style={{ position: "relative" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  marginBottom: 8,
+                }}
+              >
+                <span className="section-title" style={{ margin: 0 }}>
+                  Feature Matrix Overview
+                </span>
+                <InfoTip title="Feature Matrix & Rating Parameters">
+                  <p>
+                    These cards summarize the internal data structures the
+                    recommendation engine uses to compare movies.
+                  </p>
+                  <p>
+                    <strong>Movies (rows):</strong> Total number of movies in
+                    the dataset. Each movie is one row in the feature matrix.
+                  </p>
+                  <p>
+                    <strong>Features (cols):</strong> Total number of unique
+                    text features extracted from all fields (genres, keywords,
+                    cast, director, overview, etc.). More features means the
+                    model can make finer-grained distinctions.
+                  </p>
+                  <p>
+                    <strong>Sparsity:</strong> Percentage of the feature matrix
+                    that is zero. A movie only has "1" for features it actually
+                    has (e.g., the genre "Action"). Since each movie has only a
+                    few features out of thousands, sparsity is typically 99%+.
+                    This is normal and efficient — sparse matrices compress
+                    well.
+                  </p>
+                  <p>
+                    <strong>C (mean vote avg):</strong> The average rating
+                    across all movies in the dataset. Used in the IMDB weighted
+                    rating formula to pull movies with few votes toward the
+                    global average — preventing a movie with 2 votes and a 10.0
+                    rating from ranking above a movie with 10,000 votes and 8.5.
+                  </p>
+                  <p>
+                    <strong>m (60th percentile votes):</strong> The minimum vote
+                    count threshold. Movies must have at least this many votes
+                    to receive a meaningful weighted rating. Below this
+                    threshold, their score is pulled strongly toward C. This
+                    filters out obscure movies with unreliable ratings.
+                  </p>
+                  <div className="tip-example">
+                    IMDB formula: WR = (v/(v+m)) × R + (m/(v+m)) × C, where
+                    v=vote count, R=average rating.
+                  </div>
+                </InfoTip>
+              </div>
+              <div className="matrix-cards">
+                <div className="matrix-card">
+                  <div className="matrix-card-val">{rows.toLocaleString()}</div>
+                  <div className="matrix-card-lbl">Movies (rows)</div>
+                </div>
+                <div className="matrix-card">
+                  <div className="matrix-card-val">{cols.toLocaleString()}</div>
+                  <div className="matrix-card-lbl">Features (cols)</div>
+                </div>
+                <div className="matrix-card">
+                  <div className="matrix-card-val">
+                    {(feature_matrix_sparsity * 100).toFixed(1)}%
+                  </div>
+                  <div className="matrix-card-lbl">Sparsity</div>
+                </div>
+                <div className="matrix-card">
+                  <div className="matrix-card-val">
+                    {weighted_rating_params.C_mean_vote?.toFixed(2) ?? "—"}
+                  </div>
+                  <div className="matrix-card-lbl">C (mean vote avg)</div>
+                </div>
+                <div className="matrix-card">
+                  <div className="matrix-card-val">
+                    {weighted_rating_params.m_60th_percentile?.toFixed(0) ??
+                      "—"}
+                  </div>
+                  <div className="matrix-card-lbl">m (60th pct votes)</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="charts-row">
+              <div className="chart-card" style={{ flex: 1, minWidth: 260 }}>
+                <div className="chart-title">
+                  Field Weights Radar
+                  <InfoTip title="Field Weights Radar Chart">
+                    <p>
+                      This radar chart visualizes how much importance the model
+                      gives to each content field when computing movie
+                      similarity. Larger area = more emphasis on that field.
+                    </p>
+                    <p>
+                      <strong>What each field means:</strong>
+                    </p>
+                    <p>
+                      <strong>overview</strong> — Plot description analyzed with
+                      TF-IDF. Common words down-weighted; distinctive plot terms
+                      emphasized.
+                    </p>
+                    <p>
+                      <strong>genres</strong> — Categories like Action, Comedy.
+                      Direct feature match — shared genres = higher score.
+                    </p>
+                    <p>
+                      <strong>keywords</strong> — Theme tags (e.g., "time
+                      travel", "heist"). More specific than genres.
+                    </p>
+                    <p>
+                      <strong>cast</strong> — Top 5 actors. Shared actors
+                      increase similarity.
+                    </p>
+                    <p>
+                      <strong>director</strong> — Same director = strong style
+                      signal. Typically high weight.
+                    </p>
+                    <p>
+                      <strong>decade</strong> — Release era (1990s, 2000s).
+                      Light weight for period preferences.
+                    </p>
+                    <p>
+                      <strong>language</strong> — Original language. Groups
+                      foreign-language films.
+                    </p>
+                    <p>
+                      <strong>collection</strong> — Film franchise (e.g., "Harry
+                      Potter Collection"). Links sequels.
+                    </p>
+                    <div className="tip-example">
+                      Weight 2.0 = double influence vs weight 1.0. Adjust in
+                      Operations tab.
+                    </div>
+                  </InfoTip>
+                </div>
+                {radarLabels.length > 0 ? (
+                  <ChartComponent
+                    type="radar"
+                    data={radarData}
+                    options={radarOpts}
+                    height={280}
+                  />
+                ) : (
+                  <div className="empty-state">No field weights data.</div>
+                )}
+              </div>
+
+              <div className="chart-card" style={{ flex: 1, minWidth: 280 }}>
+                <div className="chart-title">
+                  Data Fill Rate per Field
+                  <InfoTip title="Data Fill Rate">
+                    <p>
+                      This chart shows what percentage of movies have non-empty
+                      data for each content field. A "filled" movie has usable
+                      text for that field; an "empty" movie has nothing.
+                    </p>
+                    <p>
+                      <strong>Why it matters:</strong> If a field like
+                      "keywords" is only 40% filled, 60% of movies contribute
+                      nothing for that field in similarity calculations. Fields
+                      with low fill rates have less influence on recommendations
+                      regardless of their weight.
+                    </p>
+                    <div className="tip-good">
+                      Green (80%+): Excellent coverage — this field reliably
+                      contributes to movie comparisons.
+                    </div>
+                    <div className="tip-warn">
+                      Yellow (50-80%): Moderate — useful but many movies lack
+                      this data.
+                    </div>
+                    <div className="tip-bad">
+                      Red (&lt;50%): Poor coverage — consider lowering this
+                      field's weight or improving the data.
+                    </div>
+                  </InfoTip>
+                </div>
+                {qualityFields.length > 0 ? (
+                  <ChartComponent
+                    type="bar"
+                    data={fillRateData}
+                    options={fillRateOpts}
+                    height={280}
+                  />
+                ) : (
+                  <div className="empty-state">No data quality stats.</div>
+                )}
+              </div>
+            </div>
+
+            {simHistData && (
+              <div className="chart-card" style={{ marginBottom: 20 }}>
+                <div className="chart-title">
+                  Cosine Similarity Distribution (pairwise sample)
+                  <InfoTip title="Cosine Similarity Distribution">
+                    <p>
+                      This histogram shows the distribution of pairwise cosine
+                      similarity scores between all movies in the dataset
+                      (sampled for performance).
+                    </p>
+                    <p>
+                      <strong>Cosine similarity</strong> measures how similar
+                      two movies are based on their combined content features
+                      (genres, keywords, cast, director, overview, etc.). It
+                      ranges from 0 (completely different) to 1 (identical
+                      content profile).
+                    </p>
+                    <p>
+                      <strong>How to read it:</strong> The x-axis shows
+                      similarity values, y-axis shows how many movie pairs fall
+                      in each range. Most pairs should have low similarity
+                      (movies are generally different from each other).
+                    </p>
+                    <p>
+                      <strong>Key statistics:</strong>
+                    </p>
+                    <p>
+                      <strong>Mean</strong> — Average similarity across all
+                      pairs. Typically 0.02-0.10 for a diverse movie catalog.
+                    </p>
+                    <p>
+                      <strong>Median</strong> — Middle value. If much lower than
+                      mean, there are a few highly similar pairs pulling the
+                      average up.
+                    </p>
+                    <p>
+                      <strong>P95</strong> — 95th percentile. Only 5% of pairs
+                      are more similar than this value. Useful for understanding
+                      "what counts as very similar."
+                    </p>
+                    <div className="tip-good">
+                      Healthy: Most mass near 0, long tail toward 1 — diverse
+                      catalog with some naturally similar movies.
+                    </div>
+                    <div className="tip-bad">
+                      Concerning: Large spike at high values — many movies look
+                      identical, likely data quality issue.
+                    </div>
+                  </InfoTip>
+                  {cosine_sim_stats && (
+                    <span
+                      style={{
+                        color: "rgba(255,255,255,0.4)",
+                        fontSize: 12,
+                        fontWeight: 400,
+                        marginLeft: 12,
+                      }}
+                    >
+                      mean={cosine_sim_stats.mean?.toFixed(4)} &nbsp; median=
+                      {cosine_sim_stats.median?.toFixed(4)} &nbsp; p95=
+                      {cosine_sim_stats.p95?.toFixed(4)}
+                    </span>
+                  )}
+                </div>
+                <ChartComponent
+                  type="bar"
+                  data={simHistData}
+                  options={simHistOpts}
+                  height={250}
+                />
+              </div>
+            )}
+
+            <div className="glass-card">
+              <div className="section-title">
+                Vectorizer Stats
+                <InfoTip title="Vectorizer Stats Table">
+                  <p>
+                    This table shows technical details about how each content
+                    field is converted into numbers the model can use.
+                  </p>
+                  <p>
+                    <strong>Field:</strong> The content field (genres, keywords,
+                    cast, etc.) being vectorized.
+                  </p>
+                  <p>
+                    <strong>Type:</strong> The vectorization method used:
+                  </p>
+                  <p>
+                    <strong>TfidfVectorizer</strong> — Weighs words by how
+                    unique they are. Common words (like "the") get low scores;
+                    rare, distinctive words get high scores. Used for free-text
+                    fields (overview, keywords).
+                  </p>
+                  <p>
+                    <strong>CountVectorizer</strong> — Simple word counting.
+                    Each unique term gets a 1 or 0. Used for structured fields
+                    (genres, cast, director) where every term is equally
+                    meaningful.
+                  </p>
+                  <p>
+                    <strong>Vocab Size:</strong> Number of unique terms the
+                    vectorizer learned. Large vocab (10,000+) means the field
+                    captures fine detail. Small vocab (20-50) means the field
+                    has limited categories.
+                  </p>
+                  <p>
+                    <strong>Weight:</strong> Multiplier applied to this field's
+                    feature matrix before combining. Higher weight = more
+                    influence on similarity calculations.
+                  </p>
+                  <p>
+                    <strong>Fill Rate:</strong> Percentage of movies that have
+                    non-empty data for this field.
+                  </p>
+                </InfoTip>
+              </div>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Field</th>
+                    <th>Type</th>
+                    <th>Vocab Size</th>
+                    <th>Weight</th>
+                    <th>Fill Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(vectorizer_stats).map(([field, vs]) => {
+                    const fill = data_quality[field]?.fill_rate ?? 1;
+                    const fillPct = (fill * 100).toFixed(1);
+                    const barColor =
+                      fill >= 0.8
+                        ? "#51cf66"
+                        : fill >= 0.5
+                          ? "#ffd43b"
+                          : "#ff6b6b";
+                    return (
+                      <tr key={field}>
+                        <td style={{ fontWeight: 600 }}>{field}</td>
+                        <td
+                          style={{
+                            color: "rgba(255,255,255,0.55)",
+                            fontSize: 12,
+                          }}
+                        >
+                          {vs.type}
+                        </td>
+                        <td>{vs.vocab_size?.toLocaleString() ?? "—"}</td>
+                        <td style={{ color: "#ffd43b" }}>{vs.weight}</td>
+                        <td>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 8,
+                            }}
+                          >
+                            <div
+                              className="fill-bar-wrap"
+                              style={{ width: 80 }}
+                            >
+                              <div
+                                className="fill-bar"
+                                style={{
+                                  width: fillPct + "%",
+                                  background: barColor,
+                                }}
+                              />
+                            </div>
+                            <span
+                              style={{
+                                fontSize: 12,
+                                color: "rgba(255,255,255,0.6)",
+                              }}
+                            >
+                              {fillPct}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      }
+
+      // ---------------------------------------------------------------------------
+      // Tab 6: Offline Metrics
+      // ---------------------------------------------------------------------------
+      function qualityColor(value, thresholds) {
+        const [good, ok] = thresholds;
+        if (value >= good) return "#51cf66";
+        if (value >= ok) return "#ffd43b";
+        return "#ff6b6b";
+      }
+
+      const OFFLINE_META = [
+        {
+          key: "precision_at_k",
+          label: "Precision@K",
+          desc: "Fraction of top-K recommendations the user would like.",
+          thresholds: [0.8, 0.5],
+          fmt: (v) => (v * 100).toFixed(1) + "%",
+        },
+        {
+          key: "ndcg_at_k",
+          label: "NDCG@K",
+          desc: "Normalized Discounted Cumulative Gain — rewards relevant items ranked higher.",
+          thresholds: [0.8, 0.5],
+          fmt: (v) => (v * 100).toFixed(1) + "%",
+        },
+        {
+          key: "mrr",
+          label: "MRR",
+          desc: "Mean Reciprocal Rank — how quickly the first relevant item appears.",
+          thresholds: [0.8, 0.5],
+          fmt: (v) => v.toFixed(3),
+        },
+        {
+          key: "coverage",
+          label: "Coverage",
+          desc: "Fraction of catalog the model actually recommends.",
+          thresholds: [0.5, 0.2],
+          fmt: (v) => (v * 100).toFixed(1) + "%",
+        },
+        {
+          key: "intra_list_diversity",
+          label: "ILD",
+          desc: "Average pairwise dissimilarity within recommendation lists — higher = more diverse.",
+          thresholds: [0.3, 0.1],
+          fmt: (v) => v.toFixed(3),
+        },
+        {
+          key: "novelty",
+          label: "Novelty",
+          desc: "Average self-information of recommended items — higher = more niche picks.",
+          thresholds: [3, 1],
+          fmt: (v) => v.toFixed(2),
+        },
+        {
+          key: "serendipity_at_k",
+          label: "Serendipity",
+          desc: "How surprising but relevant the recommendations are.",
+          thresholds: [0.2, 0.1],
+          fmt: (v) => v.toFixed(3),
+        },
+      ];
+
+      const OFFLINE_TIPS = {
+        precision_at_k: {
+          title: "Precision@K (Precision at K)",
+          content: `Precision@K answers: "Of the top K movies the model recommended, how many did the user actually like?"
+
+How it's calculated: For each test movie, the model generates K recommendations. We count how many of those K recommendations share at least one genre with the test movie (genre overlap = relevant). Precision = relevant / K, averaged across all test movies.
+
+Example: If K=10 and 8 out of 10 recommendations share genres with the test movie, Precision@10 = 80%.
+
+What the values mean:
+• 90-100%: Excellent — nearly every recommendation is relevant
+• 70-90%: Good — most recommendations hit the mark
+• 50-70%: Fair — about half the recommendations feel random
+• Below 50%: Poor — model is not capturing content patterns well
+
+This is the most intuitive metric: "How often does the model recommend something I'd like?"`,
+        },
+        ndcg_at_k: {
+          title: "NDCG@K (Normalized Discounted Cumulative Gain)",
+          content: `NDCG@K cares not just about WHAT is recommended, but WHERE it's placed in the list. The best items should appear at the top.
+
+How it's calculated: Each recommended movie gets a "relevance score" based on genre overlap count with the test movie. NDCG then applies a logarithmic discount — item at position 1 counts fully, position 2 is discounted, position 3 even more, etc. The result is normalized against the "perfect" ranking.
+
+Example: If the most relevant movie is at position 1, NDCG is high. If it's buried at position 8, NDCG drops — even if it's in the list.
+
+What the values mean:
+• 90-100%: Excellent — best items consistently ranked at the top
+• 70-90%: Good — ranking is mostly correct
+• 50-70%: Fair — relevant items appear but not in optimal order
+• Below 50%: Poor — no meaningful ranking quality
+
+NDCG is stricter than Precision — you can have high Precision but low NDCG if good items are at the bottom of the list.`,
+        },
+        mrr: {
+          title: "MRR (Mean Reciprocal Rank)",
+          content: `MRR measures how quickly the FIRST relevant recommendation appears. It answers: "How far does the user have to scroll to find something good?"
+
+How it's calculated: For each test movie, find the position (rank) of the first recommendation that shares a genre. Reciprocal rank = 1/rank. MRR is the average across all test movies.
+
+Example:
+• First relevant at position 1 → RR = 1/1 = 1.000
+• First relevant at position 2 → RR = 1/2 = 0.500
+• First relevant at position 5 → RR = 1/5 = 0.200
+• No relevant in top K → RR = 0
+
+What the values mean:
+• 0.9-1.0: Excellent — first recommendation is almost always relevant
+• 0.7-0.9: Good — relevant item usually in top 2
+• 0.4-0.7: Fair — relevant item typically in top 3-5
+• Below 0.4: Poor — users must scroll past many irrelevant items`,
+        },
+        coverage: {
+          title: "Coverage (Catalog Coverage)",
+          content: `Coverage measures what fraction of the entire movie catalog the model ever recommends across all queries. It answers: "Does the model recommend diverse movies, or always the same popular ones?"
+
+How it's calculated: Run recommendations for all test movies, collect every unique movie title that appears in any recommendation list, divide by total catalog size.
+
+Example: If the catalog has 9000 movies and recommendation lists collectively mention 4500 unique titles, Coverage = 50%.
+
+What the values mean:
+• 50%+: Excellent — model explores the catalog broadly
+• 20-50%: Good — reasonable diversity
+• 10-20%: Fair — model tends to recommend the same popular titles
+• Below 10%: Poor — "popularity bias" dominates
+
+Low coverage isn't always bad — it can mean the model focuses on high-quality movies. But very low coverage creates a "filter bubble" where users never discover hidden gems.`,
+        },
+        intra_list_diversity: {
+          title: "ILD (Intra-List Diversity)",
+          content: `ILD measures how different the movies within a single recommendation list are from each other. It answers: "Does the model recommend a varied mix, or ten very similar movies?"
+
+How it's calculated: For each recommendation list, compute pairwise cosine similarity between all recommended movies. ILD = 1 - mean(pairwise similarity). Averaged across all test queries.
+
+Example: If all 10 recommended movies are action blockbusters with similar cast/directors, ILD is low. If the list mixes genres, eras, and styles, ILD is high.
+
+What the values mean:
+• 0.5+: Very diverse lists — broad content variety
+• 0.3-0.5: Good diversity — mix of similar and different items
+• 0.1-0.3: Moderate — lists tend toward sameness
+• Below 0.1: Low diversity — echo chamber recommendations
+
+There's a trade-off: very high ILD can mean less relevance (random picks are maximally diverse). The sweet spot balances relevance with variety.`,
+        },
+        novelty: {
+          title: "Novelty (Self-Information)",
+          content: `Novelty measures whether the model recommends obscure/niche movies rather than just popular blockbusters. It answers: "Are these recommendations surprising or just 'the usual suspects'?"
+
+How it's calculated: For each recommended movie, compute -log₂(popularity). Popular movies have high popularity → low self-information → low novelty. Obscure movies have low popularity → high self-information → high novelty. Average across all recommendations.
+
+Example: Recommending "The Shawshank Redemption" (extremely popular) gives low novelty. Recommending "Wings of Desire" (less known) gives high novelty.
+
+What the values mean:
+• 4.0+: Very novel — mostly niche recommendations
+• 3.0-4.0: Good novelty — healthy mix of popular and obscure
+• 1.0-3.0: Moderate — tilts toward well-known movies
+• Below 1.0: Low — only recommending blockbusters
+
+Higher novelty is generally better for discovery, but extremely high novelty might mean recommending obscure low-quality movies.`,
+        },
+        serendipity_at_k: {
+          title: "Serendipity@K",
+          content: `Serendipity measures whether recommendations are both SURPRISING and RELEVANT — the "pleasant surprise" factor. It answers: "Does the model find hidden gems I wouldn't have found on my own?"
+
+How it's calculated: For each recommended movie, compute:
+• Unexpectedness = 1 - normalized_popularity (obscure = unexpected)
+• Relevance = 1 if genre overlap with test movie, else 0
+• Serendipity = unexpectedness × relevance
+Average across all recommendations.
+
+Example: A relevant but unpopular movie scores high (surprising AND good). A popular relevant movie scores low (good but expected). An irrelevant obscure movie scores 0 (surprising but useless).
+
+What the values mean:
+• 0.3+: Excellent — many surprising relevant picks
+• 0.2-0.3: Good — some hidden gems in the mix
+• 0.1-0.2: Moderate — mostly safe, predictable choices
+• Below 0.1: Low — recommendations are either obvious or irrelevant
+
+This is the hardest metric to score well on — it requires the model to find movies that are simultaneously relevant and non-obvious.`,
+        },
+      };
+
+      function TabOfflineMetrics({
+        offlineMetrics,
+        loadingOffline,
+        fetchOfflineMetrics,
+      }) {
+        useEffect(() => {
+          if (!offlineMetrics && !loadingOffline) fetchOfflineMetrics();
+        }, []);
+
+        if (loadingOffline) {
+          return (
+            <div className="spinner-wrap">
+              <div className="spinner"></div>
+              Computing offline metrics — this takes 5-10 seconds...
+            </div>
+          );
+        }
+
+        if (!offlineMetrics) {
+          return (
+            <div className="empty-state">Offline metrics unavailable.</div>
+          );
+        }
+
+        const perGenre = offlineMetrics.per_genre_precision || {};
+
+        const pgLabels = Object.entries(perGenre)
+          .sort((a, b) => b[1] - a[1])
+          .map(([g]) => g);
+        const pgVals = pgLabels.map((g) => +(perGenre[g] * 100).toFixed(1));
+
+        const pgData = {
+          labels: pgLabels,
+          datasets: [
+            {
+              label: "Precision@K %",
+              data: pgVals,
+              backgroundColor: pgVals.map((v) =>
+                v >= 80
+                  ? "rgba(81,207,102,0.65)"
+                  : v >= 50
+                    ? "rgba(255,212,59,0.65)"
+                    : "rgba(255,107,107,0.65)",
+              ),
+              borderWidth: 0,
+              borderRadius: 3,
+            },
+          ],
+        };
+
+        const pgOpts = chartOpts({
+          indexAxis: "y",
+          scales: {
+            x: { min: 0, max: 100, ticks: { callback: (v) => v + "%" } },
+          },
+          plugins: { legend: { display: false } },
+        });
+
+        return (
+          <div>
+            <div className="metric-grid">
+              {OFFLINE_META.map((m) => {
+                const val = offlineMetrics[m.key];
+                if (val === undefined) return null;
+                const color = qualityColor(val, m.thresholds);
+                const displayVal = m.fmt(val);
+                const barPct = Math.min(100, (val / m.thresholds[0]) * 100);
+                const tip = OFFLINE_TIPS[m.key];
+                return (
+                  <div key={m.key} className="metric-card">
+                    <div className="metric-card-name">
+                      {m.label}
+                      {tip && (
+                        <InfoTip title={tip.title}>
+                          {tip.content.split("\n\n").map((para, i) => (
+                            <p key={i}>{para}</p>
+                          ))}
+                        </InfoTip>
+                      )}
+                    </div>
+                    <div className="metric-card-value" style={{ color }}>
+                      {displayVal}
+                    </div>
+                    <div className="metric-quality-bar-wrap">
+                      <div
+                        className="metric-quality-bar"
+                        style={{
+                          width: Math.min(100, barPct) + "%",
+                          background: color,
+                        }}
+                      />
+                    </div>
+                    <div className="metric-card-desc">{m.desc}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {pgLabels.length > 0 && (
+              <div className="chart-card">
+                <div className="chart-title">
+                  Per-Genre Precision@K
+                  <InfoTip title="Per-Genre Precision@K Breakdown">
+                    <p>
+                      This chart breaks down Precision@K by movie genre, showing
+                      how well the model performs for each genre individually.
+                    </p>
+                    <p>
+                      <strong>How to read it:</strong> Each bar shows the
+                      average Precision@K for test movies of that genre. For
+                      example, if "Action" shows 95%, it means when you ask for
+                      recommendations based on an Action movie, 95% of the
+                      results share at least one genre with it.
+                    </p>
+                    <p>
+                      <strong>Why genres differ:</strong> Some genres are easier
+                      to recommend for because they have strong, distinctive
+                      features (e.g., Horror has a unique vocabulary). Others
+                      like Drama are broad and overlap with many genres, making
+                      precision naturally higher but less meaningful.
+                    </p>
+                    <div className="tip-good">
+                      Green (80%+): Model excels at this genre.
+                    </div>
+                    <div className="tip-warn">
+                      Yellow (50-80%): Moderate — model sometimes misses.
+                    </div>
+                    <div className="tip-bad">
+                      Red (&lt;50%): Model struggles with this genre — may need
+                      more data or higher weight on distinguishing fields.
+                    </div>
+                    <div className="tip-example">
+                      Only genres with 3+ test movies are shown to ensure
+                      statistical reliability.
+                    </div>
+                  </InfoTip>
+                </div>
+                <ChartComponent
+                  type="bar"
+                  data={pgData}
+                  options={pgOpts}
+                  height={Math.max(240, pgLabels.length * 28)}
+                />
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // ---------------------------------------------------------------------------
+      // Tab 7: Operations
+      // ---------------------------------------------------------------------------
+      function TabOperations({ onModelChanged, onOfflineChanged }) {
+        const [taskId, setTaskId] = useState(null);
+        const [taskState, setTaskState] = useState(null);
+        const [weights, setWeights] = useState(null);
+        const [gsResults, setGsResults] = useState(null);
+        const [message, setMessage] = useState(null);
+        const pollRef = useRef(null);
+
+        // Load current weights on mount
+        useEffect(() => {
+          fetch("/api/model/weights")
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => {
+              if (d) setWeights(d.weights);
+            })
+            .catch(() => {});
+        }, []);
+
+        // Poll active task
+        useEffect(() => {
+          if (!taskId) return;
+          const poll = () => {
+            fetch(`/api/tasks/${taskId}`)
+              .then((r) => (r.ok ? r.json() : null))
+              .then((t) => {
+                if (!t) return;
+                setTaskState(t);
+                if (t.status !== "running") {
+                  clearInterval(pollRef.current);
+                  pollRef.current = null;
+                  setTaskId(null);
+                  if (t.status === "completed") {
+                    if (t.type === "retrain" || t.type === "apply_weights") {
+                      onModelChanged();
+                      // Reload weights
+                      fetch("/api/model/weights")
+                        .then((r) => (r.ok ? r.json() : null))
+                        .then((d) => {
+                          if (d) setWeights(d.weights);
+                        });
+                    }
+                    if (t.type === "evaluate") onOfflineChanged();
+                    if (
+                      t.type === "gridsearch" &&
+                      t.result &&
+                      !t.result.cancelled
+                    ) {
+                      setGsResults(t.result);
+                    }
+                    setMessage({
+                      type: "success",
+                      text: `${t.type} completed`,
+                    });
+                  } else {
+                    setMessage({
+                      type: "error",
+                      text: t.error || "Task failed",
+                    });
+                  }
+                }
+              });
+          };
+          pollRef.current = setInterval(poll, 1000);
+          poll();
+          return () => {
+            if (pollRef.current) clearInterval(pollRef.current);
+          };
+        }, [taskId]);
+
+        const busy = !!taskId;
+
+        const startOp = async (endpoint, opts = {}) => {
+          setMessage(null);
+          try {
+            const fetchOpts = { method: "POST", ...opts };
+            const res = await fetch(endpoint, fetchOpts);
+            if (!res.ok) {
+              const err = await res
+                .json()
+                .catch(() => ({ detail: "Request failed" }));
+              setMessage({
+                type: "error",
+                text: err.detail || "Request failed",
+              });
+              return;
+            }
+            const data = await res.json();
+            if (data.task_id) {
+              setTaskId(data.task_id);
+              setTaskState({
+                status: "running",
+                progress: 0,
+                progress_msg: "Starting...",
+              });
+            } else {
+              setMessage({ type: "success", text: data.status || "Done" });
+              if (endpoint.includes("reload-model")) onModelChanged();
+              if (endpoint.includes("reload-data")) onModelChanged();
+            }
+          } catch (e) {
+            setMessage({ type: "error", text: e.message });
+          }
+        };
+
+        const handleCancel = async () => {
+          if (!taskId) return;
+          await fetch(`/api/tasks/${taskId}/cancel`, { method: "POST" });
+        };
+
+        const handleApplyWeights = () => {
+          if (!weights) return;
+          startOp("/api/operations/apply-weights", {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ weights }),
+          });
+        };
+
+        const handleApplyBest = () => {
+          if (!gsResults || !gsResults.best_weights) return;
+          setWeights({ ...gsResults.best_weights });
+          startOp("/api/operations/apply-weights", {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ weights: gsResults.best_weights }),
+          });
+        };
+
+        const cancellable =
+          taskState &&
+          taskState.status === "running" &&
+          (taskState.type === "gridsearch" ||
+            taskState.type === "fetch_posters");
+
+        return (
+          <div>
+            {/* Status message */}
+            {message && (
+              <div
+                style={{
+                  padding: "12px 16px",
+                  borderRadius: 8,
+                  marginBottom: 16,
+                  background:
+                    message.type === "error"
+                      ? "rgba(255,107,107,0.15)"
+                      : "rgba(81,207,102,0.15)",
+                  border: `1px solid ${message.type === "error" ? "rgba(255,107,107,0.3)" : "rgba(81,207,102,0.3)"}`,
+                  color: message.type === "error" ? "#ff6b6b" : "#51cf66",
+                  fontSize: 13,
+                }}
+              >
+                {message.text}
+              </div>
+            )}
+
+            {/* Active task progress */}
+            {taskState && taskState.status === "running" && (
+              <div className="ops-progress-wrap">
+                <div className="ops-progress-header">
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>
+                    {taskState.type || "Task"} running...
+                  </span>
+                  <div
+                    style={{ display: "flex", gap: 8, alignItems: "center" }}
+                  >
+                    <span className="ops-status running">
+                      {(taskState.progress * 100).toFixed(0)}%
+                    </span>
+                    {cancellable && (
+                      <button
+                        className="ops-btn danger"
+                        style={{ width: "auto", padding: "6px 14px" }}
+                        onClick={handleCancel}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="ops-progress-bar-bg">
+                  <div
+                    className="ops-progress-bar"
+                    style={{ width: `${taskState.progress * 100}%` }}
+                  />
+                </div>
+                <div className="ops-progress-msg">{taskState.progress_msg}</div>
+              </div>
+            )}
+
+            {/* Heavy operations */}
+            <div className="section-title">Heavy Operations</div>
+            <div className="ops-grid">
+              <div className="ops-card">
+                <div className="ops-card-title">Retrain Model</div>
+                <div className="ops-card-desc">
+                  Full pipeline: load raw data, build features, fit recommender,
+                  save pickle.
+                </div>
+                <button
+                  className="ops-btn"
+                  disabled={busy}
+                  onClick={() => startOp("/api/operations/retrain")}
+                >
+                  Start Retrain
+                </button>
+              </div>
+              <div className="ops-card">
+                <div className="ops-card-title">Evaluate Metrics</div>
+                <div className="ops-card-desc">
+                  Run Precision@K, NDCG, Coverage, Diversity, Novelty on 100
+                  test movies.
+                </div>
+                <button
+                  className="ops-btn"
+                  disabled={busy}
+                  onClick={() => startOp("/api/operations/evaluate")}
+                >
+                  Run Evaluation
+                </button>
+              </div>
+              <div className="ops-card">
+                <div className="ops-card-title">Grid Search</div>
+                <div className="ops-card-desc">
+                  256 weight combinations over genres, keywords, director,
+                  collection.
+                </div>
+                <button
+                  className="ops-btn"
+                  disabled={busy}
+                  onClick={() => startOp("/api/operations/gridsearch")}
+                >
+                  Start Grid Search
+                </button>
+              </div>
+              <div className="ops-card">
+                <div className="ops-card-title">Fetch Posters</div>
+                <div className="ops-card-desc">
+                  Scrape TMDB poster URLs for movies missing posters. Slow,
+                  cancellable.
+                </div>
+                <button
+                  className="ops-btn"
+                  disabled={busy}
+                  onClick={() => startOp("/api/operations/fetch-posters")}
+                >
+                  Start Fetch
+                </button>
+              </div>
+            </div>
+
+            {/* Quick operations */}
+            <div className="section-title">Quick Operations</div>
+            <div className="ops-grid" style={{ marginBottom: 24 }}>
+              <div className="ops-card">
+                <div className="ops-card-title">Reload Model</div>
+                <div className="ops-card-desc">
+                  Re-read recommender.pkl from disk and hot-swap.
+                </div>
+                <button
+                  className="ops-btn secondary"
+                  disabled={busy}
+                  onClick={() => startOp("/api/operations/reload-model")}
+                >
+                  Reload
+                </button>
+              </div>
+              <div className="ops-card">
+                <div className="ops-card-title">Reload Data</div>
+                <div className="ops-card-desc">
+                  Re-read movies_processed.csv and update poster URLs.
+                </div>
+                <button
+                  className="ops-btn secondary"
+                  disabled={busy}
+                  onClick={() => startOp("/api/operations/reload-data")}
+                >
+                  Reload
+                </button>
+              </div>
+            </div>
+
+            {/* Weight editor */}
+            {weights && (
+              <React.Fragment>
+                <div className="section-title">Field Weights</div>
+                <div className="weight-editor">
+                  {Object.entries(weights).map(([field, val]) => (
+                    <div className="weight-row" key={field}>
+                      <span className="weight-label">{field}</span>
+                      <input
+                        type="range"
+                        className="weight-slider"
+                        min="0"
+                        max="3"
+                        step="0.1"
+                        value={val}
+                        onChange={(e) =>
+                          setWeights((w) => ({
+                            ...w,
+                            [field]: parseFloat(e.target.value),
+                          }))
+                        }
+                      />
+                      <span className="weight-val">{val.toFixed(1)}</span>
+                    </div>
+                  ))}
+                  <button
+                    className="ops-btn"
+                    disabled={busy}
+                    onClick={handleApplyWeights}
+                    style={{ marginTop: 12 }}
+                  >
+                    Apply Weights &amp; Retrain
+                  </button>
+                </div>
+              </React.Fragment>
+            )}
+
+            {/* Grid search results */}
+            {gsResults && (
+              <React.Fragment>
+                <div className="section-title">Grid Search Results</div>
+                <div className="glass-card" style={{ marginBottom: 24 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: 12,
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>
+                      Best:{" "}
+                      <strong style={{ color: "#51cf66" }}>
+                        {gsResults.best_score.toFixed(4)}
+                      </strong>{" "}
+                      ({gsResults.total_combos} combos)
+                    </span>
+                    <button
+                      className="ops-btn"
+                      style={{ width: "auto", padding: "8px 16px" }}
+                      disabled={busy}
+                      onClick={handleApplyBest}
+                    >
+                      Apply Best Weights
+                    </button>
+                  </div>
+                  <table className="gs-results-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        {gsResults.top_10[0] &&
+                          Object.keys(gsResults.top_10[0].weights).map((f) => (
+                            <th key={f}>{f}</th>
+                          ))}
+                        <th>P@K</th>
+                        <th>NDCG</th>
+                        <th>Combined</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {gsResults.top_10.map((row, idx) => (
+                        <tr key={idx} className={idx === 0 ? "gs-best" : ""}>
+                          <td>{idx + 1}</td>
+                          {Object.values(row.weights).map((v, j) => (
+                            <td key={j}>{v.toFixed(1)}</td>
+                          ))}
+                          <td>{(row.precision_at_k * 100).toFixed(1)}%</td>
+                          <td>{row.ndcg_at_k.toFixed(4)}</td>
+                          <td>{row.combined.toFixed(4)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </React.Fragment>
+            )}
+          </div>
+        );
+      }
+
+      // ---------------------------------------------------------------------------
+      // Main App
+      // ---------------------------------------------------------------------------
+      const TABS = [
+        { id: "session", label: "Session" },
+        { id: "modelvr", label: "Model vs Random" },
+        { id: "genre", label: "Genres" },
+        { id: "scores", label: "Scores" },
+        { id: "model", label: "Model Training" },
+        { id: "offline", label: "Offline Metrics" },
+        { id: "operations", label: "Operations" },
+      ];
+
+      function App() {
+        const [activeTab, setActiveTab] = useState("session");
+        const [analytics, setAnalytics] = useState(null);
+        const [catalogStats, setCatalogStats] = useState(null);
+        const [modelStats, setModelStats] = useState(null);
+        const [offlineMetrics, setOfflineMetrics] = useState(null);
+        const [loadingModel, setLoadingModel] = useState(false);
+        const [loadingOffline, setLoadingOffline] = useState(false);
+
+        const fetchAnalytics = useCallback(async () => {
+          try {
+            const res = await fetch("/api/analytics");
+            if (!res.ok) return;
+            const data = await res.json();
+            setAnalytics(data);
+          } catch (e) {
+            console.error("analytics fetch failed:", e);
+          }
+        }, []);
+
+        // Poll analytics every 5s
+        useEffect(() => {
+          fetchAnalytics();
+          const id = setInterval(fetchAnalytics, 5000);
+          return () => clearInterval(id);
+        }, [fetchAnalytics]);
+
+        const fetchModelStats = useCallback(async () => {
+          if (modelStats || loadingModel) return;
+          setLoadingModel(true);
+          try {
+            const res = await fetch("/api/analytics/model");
+            if (res.ok) setModelStats(await res.json());
+          } catch (e) {
+            console.error("model stats fetch failed:", e);
+          }
+          setLoadingModel(false);
+        }, [modelStats, loadingModel]);
+
+        const fetchOfflineMetrics = useCallback(async () => {
+          if (offlineMetrics || loadingOffline) return;
+          setLoadingOffline(true);
+          try {
+            const res = await fetch("/api/analytics/offline");
+            if (res.ok) setOfflineMetrics(await res.json());
+          } catch (e) {
+            console.error("offline metrics fetch failed:", e);
+          }
+          setLoadingOffline(false);
+        }, [offlineMetrics, loadingOffline]);
+
+        // Load model stats eagerly when tab opens
+        useEffect(() => {
+          if (activeTab === "model") fetchModelStats();
+          if (activeTab === "offline") fetchOfflineMetrics();
+        }, [activeTab]);
+
+        const invalidateModel = useCallback(() => setModelStats(null), []);
+        const invalidateOffline = useCallback(
+          () => setOfflineMetrics(null),
+          [],
+        );
+
+        const handleExport = () => {
+          if (!analytics) return;
+          const payload = {
+            exported_at: new Date().toISOString(),
+            total_swipes: analytics.total_swipes,
+            like_rates: analytics.like_rates,
+            confusion: analytics.confusion,
+            swipe_log: analytics.swipe_log,
+          };
+          const blob = new Blob([JSON.stringify(payload, null, 2)], {
+            type: "application/json",
+          });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `moviematch-session-${Date.now()}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+
+        const renderTab = () => {
+          switch (activeTab) {
+            case "session":
+              return <TabSession analytics={analytics} />;
+            case "modelvr":
+              return <TabModelVsRandom analytics={analytics} />;
+            case "genre":
+              return <TabGenrePopularity analytics={analytics} />;
+            case "scores":
+              return <TabScoreAnalysis analytics={analytics} />;
+            case "model":
+              return (
+                <TabModelTraining
+                  modelStats={modelStats}
+                  loadingModel={loadingModel}
+                  fetchModelStats={fetchModelStats}
+                />
+              );
+            case "offline":
+              return (
+                <TabOfflineMetrics
+                  offlineMetrics={offlineMetrics}
+                  loadingOffline={loadingOffline}
+                  fetchOfflineMetrics={fetchOfflineMetrics}
+                />
+              );
+            case "operations":
+              return (
+                <TabOperations
+                  onModelChanged={invalidateModel}
+                  onOfflineChanged={invalidateOffline}
+                />
+              );
+            default:
+              return null;
+          }
+        };
+
+        return (
+          <div className="app-container">
+            <header className="header">
+              <div className="logo">MovieMatch Analytics</div>
+              <div className="header-actions">
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: "rgba(255,255,255,0.4)",
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                >
+                  <span className="poll-dot"></span>
+                  live
+                </span>
+                <a className="nav-link" href="/">
+                  Back to Swiper
+                </a>
+                <button className="nav-link export-btn" onClick={handleExport}>
+                  Export JSON
+                </button>
+              </div>
+            </header>
+
+            <nav className="tab-bar">
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  className={`tab-btn${activeTab === t.id ? " active" : ""}`}
+                  onClick={() => setActiveTab(t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </nav>
+
+            <main>{renderTab()}</main>
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+  </body>
+</html>
