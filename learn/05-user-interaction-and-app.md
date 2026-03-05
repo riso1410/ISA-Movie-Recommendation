@@ -16,11 +16,12 @@ No prior knowledge of web development or machine learning is assumed.
 
 1. [The Tinder-Style UX Concept](#1-the-tinder-style-ux-concept)
 2. [Session State Management](#2-session-state-management)
-3. [Movie Selection Strategy -- The Two Phases](#3-movie-selection-strategy----the-two-phases)
-4. [The Recommendation Aggregation Algorithm](#4-the-recommendation-aggregation-algorithm)
-5. [API Endpoints Explained](#5-api-endpoints-explained)
-6. [How the Model "Adapts" to User Preferences](#6-how-the-model-adapts-to-user-preferences)
-7. [Limitations and Possible Improvements](#7-limitations-and-possible-improvements)
+3. [Movie Selection Strategy -- Three Phases](#3-movie-selection-strategy----three-phases)
+4. [The User Profile Recommendation Engine](#4-the-user-profile-recommendation-engine)
+5. [Recommendation List Feedback](#5-recommendation-list-feedback)
+6. [API Endpoints Explained](#6-api-endpoints-explained)
+7. [How the Model "Adapts" to User Preferences](#7-how-the-model-adapts-to-user-preferences)
+8. [Limitations and Possible Improvements](#8-limitations-and-possible-improvements)
 
 ---
 
@@ -111,16 +112,44 @@ When the server starts, it creates a single global dictionary to track the
 current user's activity:
 
 ```python
-session: dict = {"liked": [], "disliked": [], "seen": set()}
+session: dict = {"liked": [], "disliked": [], "seen": set(), "swipe_log": []}
 ```
 
-This dictionary has three keys:
+This dictionary has four keys:
 
-| Key        | Type   | Purpose                                            |
-| ---------- | ------ | -------------------------------------------------- |
-| `liked`    | `list` | Movie IDs the user swiped right on                 |
-| `disliked` | `list` | Movie IDs the user swiped left on                  |
-| `seen`     | `set`  | All movie IDs shown to the user (liked + disliked) |
+| Key         | Type   | Purpose                                            |
+| ----------- | ------ | -------------------------------------------------- |
+| `liked`     | `list` | Movie IDs the user swiped right on                 |
+| `disliked`  | `list` | Movie IDs the user swiped left on                  |
+| `seen`      | `set`  | All movie IDs shown to the user (liked + disliked) |
+| `swipe_log` | `list` | Detailed log of every interaction, with metadata   |
+
+### The Swipe Log
+
+The `swipe_log` is the richest data structure in the session. Each entry is a
+dictionary recording everything about a single user interaction:
+
+```python
+{
+    "movie_id": 155,
+    "direction": "right",           # "right" (like) or "left" (dislike)
+    "source": "model",              # "random", "model", or "rec_list"
+    "similarity_score": 0.7234,     # cosine sim (None for random picks)
+    "combined_score": 0.6891,       # blended score (None for random)
+    "popularity": 112.3,            # movie's TMDB popularity
+    "genres": ["Action", "Drama"],  # for analytics
+    "timestamp": 1709384521.3,      # Unix timestamp
+    "swipe_index": 7,               # sequential position in session
+}
+```
+
+The `source` field is critical — it tells the profile vector engine how much
+to weight this interaction (see doc 03, Section 6.3 for the weight table).
+Three sources exist:
+
+- **"random"**: Movie was shown during cold start or via exploration (15%)
+- **"model"**: Movie was selected by the profile-based recommendation engine
+- **"rec_list"**: User clicked like/dislike directly on the sidebar rec list
 
 ### Why `liked` and `disliked` Are Lists
 
@@ -134,8 +163,6 @@ duplicates -- though the current code does not produce them.
 Every time the system picks a new movie to show, it must check: "Have we already
 shown this movie?" This check happens many times per request -- once for every
 candidate movie. Using a set makes this check extremely fast.
-
-Here is the performance difference:
 
 ```
 Checking "Is movie #12345 in this collection?"
@@ -167,26 +194,27 @@ session management.
 ### What Happens on Reset
 
 When a user clicks the "Reset" button, the frontend calls `/api/reset`, and the
-server does this:
+server clears everything:
 
 ```python
 session["liked"] = []
 session["disliked"] = []
 session["seen"] = set()
+session["swipe_log"] = []
 ```
 
-All three collections are replaced with fresh, empty ones. The user is back to
+All four collections are replaced with fresh, empty ones. The user is back to
 square one -- the next movie they see will be randomly chosen, and the
 recommendations panel goes blank. The model itself is unaffected; it stays in
 memory exactly as it was.
 
 ---
 
-## 3. Movie Selection Strategy -- The Two Phases
+## 3. Movie Selection Strategy -- Three Phases
 
 The most interesting part of the application is how it decides **which movie to
 show next**. This happens in the `get_next_movie()` function, and it operates in
-two distinct phases.
+three distinct phases.
 
 ```
                     How the app picks the next movie
@@ -203,16 +231,22 @@ two distinct phases.
                           |              |
                           v              v
                    +-----------+  +------------------+
-                   | PHASE 1   |  | PHASE 2          |
-                   | Random    |  | Content-based    |
-                   | (weighted |  | recommendations  |
-                   | by        |  | aggregated from  |
-                   | popularity)|  | all liked movies |
-                   +-----------+  +------------------+
-                          |              |
-                          |         [empty?]----> fallback to Phase 1
-                          |              |
-                          v              v
+                   | PHASE 1   |  | Roll dice:       |
+                   | Random    |  | random() < 0.15? |
+                   | (weighted |  +------------------+
+                   | by        |     |           |
+                   | popularity)|   Yes          No
+                   +-----------+     |           |
+                          |          v           v
+                          |   +-----------+ +------------------+
+                          |   | PHASE 2   | | PHASE 3          |
+                          |   | Explore   | | Profile-based    |
+                          |   | (random   | | recommendation   |
+                          |   | popular)  | | from user vector |
+                          |   +-----------+ +------------------+
+                          |          |           |
+                          |          |      [empty?]--> fallback to Phase 1
+                          v          v           v
                      Return movie card to user
 ```
 
@@ -294,171 +328,245 @@ about, so they can make a genuine like/dislike decision.
 
 This gives the recommendation engine useful signal to work with.
 
-### Phase 2: Warm Recommendations (3 or More Likes)
+### Phase 2: Exploration (15% of Model Phase)
 
-Once the user has liked at least 3 movies, the system switches to content-based
-recommendations. Instead of random picks, it now uses the trained model to find
-movies similar to what the user likes.
+Once the user has 3+ likes, 85% of the time the model picks the next movie.
+But **15% of the time**, the system intentionally shows a random
+popularity-weighted movie instead — even though the model has a recommendation
+ready.
 
 ```python
-if len(liked_titles) >= 3:
-    sorted_recs = _aggregate_recommendations(liked_titles, n_per_title=15)
-    for mid, _ in sorted_recs:
-        movie_row = movies_df[movies_df["id"] == mid]
-        if not movie_row.empty:
-            return movie_to_dict(movie_row.iloc[0])
+if random.random() < EXPLORATION_RATE:  # EXPLORATION_RATE = 0.15
+    # Show a random movie (same as cold start)
+    ...
+    return movie_to_dict(chosen.iloc[0], source="random")
 ```
 
-**Why 3 likes?** With just 1 or 2 liked movies, the recommendation source is
-too narrow. If a user likes only "The Dark Knight", every recommendation will be
-a Batman or Christopher Nolan film. With 3 likes, there is enough variety to
-triangulate the user's taste. For example, liking "The Dark Knight",
-"Inception", and "The Shawshank Redemption" reveals an interest in
-well-crafted, serious dramas with complex plots -- not just superhero movies.
+This is called **epsilon-greedy exploration**, borrowed from reinforcement
+learning (see doc 03, Section 8 for the full explanation). The random pick
+prevents the system from trapping the user in an echo chamber where they only
+see the same type of movie repeatedly.
 
-**Fallback to random.** If the content-based engine runs out of unseen
-recommendations (all suggestions have already been shown), the system falls back
-to Phase 1's popularity-weighted random selection. This ensures the user always
-gets a new movie card, even if the model has exhausted its ideas.
+These exploration movies are tagged with `source="random"` in the swipe log, so
+the profile vector engine weights them appropriately (lower weight than model
+picks).
+
+### Phase 3: Profile-Based Recommendations (85% of Model Phase)
+
+The remaining 85% of the time, the system uses the **user profile vector** to
+find the best next movie. This replaces the old per-title aggregation approach.
+
+```python
+sorted_recs = _profile_recommendations(n=30)
+for mid, combined_score, cosine_score in sorted_recs:
+    movie_row = movies_df[movies_df["id"] == mid]
+    if not movie_row.empty:
+        return movie_to_dict(movie_row.iloc[0], source="model")
+```
+
+The `_profile_recommendations()` function:
+
+1. Builds a weighted sum of all interacted movies' feature vectors
+2. L2-normalizes the result
+3. Computes cosine similarity against every movie in the catalog
+4. Blends similarity with quality (combined score)
+5. Excludes seen movies, penalizes disliked-similar movies
+6. MMR re-ranks for diversity
+
+This is documented in detail in doc 03, Sections 6-7.
+
+**Why 3 likes?** With just 1 or 2 liked movies, the profile vector is too
+sparse. If a user likes only "The Dark Knight", the profile is essentially a
+copy of that single movie's feature vector, so every recommendation will be a
+Batman or Christopher Nolan film. With 3 likes, there is enough variety to
+triangulate the user's taste.
+
+**Fallback to random.** If the profile engine returns no unseen
+recommendations (extremely rare — would require the user to have seen nearly
+every movie), the system falls back to Phase 1's popularity-weighted random
+selection.
 
 ---
 
-## 4. The Recommendation Aggregation Algorithm
+## 4. The User Profile Recommendation Engine
 
-This is the core algorithm that makes MovieMatch feel "smart". Let us walk
-through it with a concrete example.
+This is the core algorithm that makes MovieMatch feel "smart". Instead of
+querying the model once per liked movie and merging results, the system builds
+a **single user profile vector** that represents the user's overall taste.
 
-### Setup: The User's Likes
+The mathematical details are covered in doc 03, Sections 6-8. This section
+focuses on _how and when_ the profile engine is used in the application.
 
-Suppose the user has liked three movies:
+### The Concept: User as a Movie
 
-1. "The Dark Knight" (superhero, crime, drama, Nolan)
-2. "Inception" (sci-fi, thriller, Nolan)
-3. "Interstellar" (sci-fi, drama, space, Nolan)
-
-### Step 1: Get Recommendations for Each Liked Movie
-
-The system calls `recommender.recommend(title, n=15)` for each liked movie.
-Each call returns the top 15 most similar movies (using the cosine similarity
-matrix built during training). Each result includes a `similarity_score`
-(how content-similar the movie is) and a `weighted_rating` (IMDB-style quality
-score).
+Each movie in the catalog is a sparse feature vector (around 20,000 dimensions —
+from TF-IDF overview words, genre labels, cast names, etc.). The user profile is
+built by taking a **weighted sum** of the feature vectors of every movie the user
+has interacted with:
 
 ```
-Recs for "The Dark Knight" (top 5 of 15):
-  Batman Begins          similarity=0.82  weighted_rating=7.5
-  The Dark Knight Rises  similarity=0.78  weighted_rating=7.2
-  Memento                similarity=0.41  weighted_rating=7.8
-  Heat                   similarity=0.38  weighted_rating=7.6
-  Prestige, The          similarity=0.35  weighted_rating=7.9
-
-Recs for "Inception" (top 5 of 15):
-  Shutter Island         similarity=0.55  weighted_rating=7.6
-  Memento                similarity=0.52  weighted_rating=7.8
-  The Prestige           similarity=0.49  weighted_rating=7.9
-  The Matrix             similarity=0.43  weighted_rating=7.8
-  Interstellar           similarity=0.40  weighted_rating=8.1  <-- already seen
-
-Recs for "Interstellar" (top 5 of 15):
-  Gravity                similarity=0.61  weighted_rating=7.1
-  The Martian            similarity=0.55  weighted_rating=7.3
-  Memento                similarity=0.38  weighted_rating=7.8
-  The Prestige           similarity=0.36  weighted_rating=7.9
-  2001: A Space Odyssey  similarity=0.34  weighted_rating=7.8
+profile = Σ  feature_vector[movie_i] × feedback_weight_i
+         i∈swipe_log
 ```
 
-### Step 2: Aggregate Scores Across All Sources
+The result is a vector in the same space as the movies. We can then compute
+cosine similarity between this "virtual movie" (the user's taste) and every
+real movie to rank the entire catalog.
 
-Here is the key insight: a movie that appears in multiple recommendation lists
-is probably a very good match for this user. The `_aggregate_recommendations()`
-function accumulates scores.
+### Feedback Weights: Not All Interactions Are Equal
 
-For each recommended movie, the score formula is:
-
-```
-score += similarity_score + 0.1 * weighted_rating
-```
-
-The `0.1 * weighted_rating` term is a small quality bonus. A movie with a
-weighted rating of 7.8 gets an extra 0.78 added to its score. This gently
-pushes higher-quality movies up the list, without overwhelming the similarity
-signal.
-
-Let us trace "Memento" through the aggregation:
+The weight assigned to each interaction depends on its **direction** (like vs
+dislike) and **source** (how the user encountered the movie):
 
 ```
-Source: "The Dark Knight" -->  score += 0.41 + 0.1 * 7.8 = 0.41 + 0.78 = 1.19
-Source: "Inception"       -->  score += 0.52 + 0.1 * 7.8 = 0.52 + 0.78 = 1.30
-Source: "Interstellar"    -->  score += 0.38 + 0.1 * 7.8 = 0.38 + 0.78 = 1.16
-                               -------
-                       Total:  3.65
+Action                          Weight    Intuition
+--------------------------------------------------------------
+Like a random movie              +1.0    Baseline positive signal
+Dislike a random movie           -0.3    Weak negative (ambiguous)
+Like a model recommendation      +2.5    Strong — model was right
+Dislike a model recommendation   -1.2    Model was wrong, learn from it
+Like from recommendation list    +3.0    Strongest — most intentional
+Dislike from recommendation list -1.5    Strong negative signal
 ```
 
-Now let us trace "The Prestige":
+Key design decisions:
+
+- **Asymmetry**: Negative weights have smaller magnitude. Dislikes are noisier
+  (user may not recognize the movie, or simply not be in the mood).
+- **Source hierarchy**: Random < Model < Rec List. The more intentional the
+  action, the more we trust the signal.
+
+### A Worked Example
+
+Suppose the user has swiped on 5 movies:
 
 ```
-Source: "The Dark Knight" -->  score += 0.35 + 0.1 * 7.9 = 0.35 + 0.79 = 1.14
-Source: "Inception"       -->  score += 0.49 + 0.1 * 7.9 = 0.49 + 0.79 = 1.28
-Source: "Interstellar"    -->  score += 0.36 + 0.1 * 7.9 = 0.36 + 0.79 = 1.15
-                               -------
-                       Total:  3.57
+1. "The Dark Knight"    → right, random     weight = +1.0
+2. "Scary Movie"        → left,  random     weight = -0.3
+3. "Inception"          → right, model      weight = +2.5
+4. "Hostel"             → left,  model      weight = -1.2
+5. "The Prestige"       → right, rec_list   weight = +3.0
 ```
 
-And "Batman Begins" (only appears from one source):
+The profile vector becomes:
 
 ```
-Source: "The Dark Knight" -->  score += 0.82 + 0.1 * 7.5 = 0.82 + 0.75 = 1.57
-                               -------
-                       Total:  1.57
+profile = TDK_vec × 1.0
+        + Scary_vec × (-0.3)
+        + Inception_vec × 2.5
+        + Hostel_vec × (-1.2)
+        + Prestige_vec × 3.0
 ```
 
-### Step 3: Exclude Seen Movies and Sort
+The resulting vector is strong in "Nolan", "thriller", "crime", "twist" (shared
+by the three liked movies with high weights). Horror dimensions are subtracted
+by both "Scary Movie" and "Hostel" negatives.
 
-Any movie the user has already swiped on (in the `seen` set) is skipped. Then
-the remaining movies are sorted by aggregate score in descending order.
+When we compute cosine similarity between this profile and every movie:
+
+- "Memento" scores high (Nolan, thriller, twist — matches the profile)
+- "The Texas Chain Saw Massacre" scores low (horror — opposite of profile)
+- "Interstellar" scores moderately (Nolan, drama — partial match)
+
+### After Scoring: Post-Processing
+
+After computing `profile × feature_matrix` cosine scores:
+
+1. **Combined score** blends similarity with quality:
+   `0.7 × cosine + 0.3 × wr_norm`
+
+2. **Hard exclude**: Seen movies are set to `-inf` (never shown again)
+
+3. **Soft penalty**: Movies with cosine_sim > 0.7 to any disliked movie get
+   their score halved (see doc 03, Section 7)
+
+4. **MMR re-ranking**: Top candidates are diversity-filtered to avoid a list
+   of near-identical movies (see doc 03, Section 4)
+
+### Why This Is Better Than Per-Title Aggregation
 
 ```
-Final ranking (simplified):
-  1. Memento              score = 3.65  (recommended by 3 liked movies)
-  2. The Prestige         score = 3.57  (recommended by 3 liked movies)
-  3. Shutter Island       score = 1.31  (recommended by 1 liked movie)
-  4. Batman Begins        score = 1.57  (recommended by 1 liked movie)
-  5. Gravity              score = 1.32  (recommended by 1 liked movie)
-  ...
+Old: Per-Title Aggregation           New: Profile Vector
+─────────────────────────           ───────────────────
+5 liked movies                       5 likes + 3 dislikes
+  → 5 × recommend()                   → 1 weighted vector sum
+  → Only likes used                   → Both likes AND dislikes
+  → All likes equal weight            → Source-aware weighting
+  → Results merged by score sum       → Cosine sim vs entire catalog
+  → No dislike penalty                → Soft penalty for disliked-similar
+  → No exploration                    → 15% epsilon-greedy exploration
 ```
-
-The system returns the #1 ranked movie as the next card.
-
-### Why Multi-Source Aggregation Works
-
-```
-Single-source approach:          Multi-source aggregation:
-
-User likes "The Dark Knight"     User likes "The Dark Knight",
-                                 "Inception", "Interstellar"
-          |                                   |
-          v                                   v
-   Only Batman/Nolan films       Movies connected to MULTIPLE
-   are recommended               liked movies bubble up
-                                              |
-          |                                   v
-          v                       "Memento" rises to #1 because
-   Narrow, predictable            it's similar to ALL THREE
-   recommendations                liked movies -- not just one
-```
-
-The multi-source approach captures the _intersection_ of the user's interests.
-A user who likes "The Dark Knight", "Inception", and "Interstellar" is not
-just a Nolan fan -- they like complex, cerebral thrillers. "Memento" fits
-that pattern perfectly, and the aggregation algorithm surfaces it precisely
-because it is connected to all three liked movies.
 
 ---
 
-## 5. API Endpoints Explained
+## 5. Recommendation List Feedback
 
-The frontend and backend communicate through five HTTP endpoints (API routes).
-Here is the complete request/response flow for each one.
+### The Sidebar as an Interactive Element
+
+The recommendation panel on the right side of the screen is not just a passive
+display — users can **like or dislike** movies directly from it. Hovering over
+a recommendation card reveals two overlay buttons:
+
+```
++-------------------+
+|  [POSTER]         |
+|                   |
+|  +---+     +---+  |   ← Appears on hover
+|  | ✘ |     | ♥ |  |
+|  +---+     +---+  |
+|                   |
+|  "Inception"      |
+|  Action | Sci-Fi  |
+|  ★ 8.1            |
++-------------------+
+```
+
+Clicking ✘ (dislike) or ♥ (like) triggers a flash animation (green for like,
+red for dislike), removes the card, and immediately refreshes the rec list.
+
+### Why Rec List Feedback Matters
+
+Rec list feedback carries the **highest weight** (3.0 for likes, -1.5 for
+dislikes) because it is the most intentional form of interaction:
+
+1. The user is looking at a curated recommendation — not a random movie
+2. They make an explicit evaluation without being "forced" to swipe
+3. Liking from the rec list confirms the model is working well
+4. Disliking from the rec list is a strong signal the model got it wrong
+
+### The /api/rec-feedback Endpoint
+
+When the user clicks a button on a rec card:
+
+1. `POST /api/rec-feedback` is called with `{movie_id, direction}`
+2. The movie is added to `swipe_log` with `source: "rec_list"`
+3. State is updated: `liked`/`disliked`/`seen`
+4. `_profile_recommendations()` is called again to rebuild the rec list
+5. The refreshed list is returned inline (no extra API call needed)
+
+A **duplicate guard** prevents stale UI from corrupting state: if the movie is
+already in `seen`, the server skips state mutation and just returns fresh recs.
+
+### How Rec Feedback Affects Recommendations
+
+Because rec-list likes carry weight 3.0 (the highest), a single rec-list like
+has more impact on the profile than three random swipes:
+
+```
+1 rec-list like (weight 3.0)  >  3 random likes (3 × 1.0 = 3.0)
+```
+
+Similarly, a rec-list dislike (-1.5) strongly pushes the profile away from that
+type of movie and triggers the soft penalty for similar movies.
+
+---
+
+## 6. API Endpoints Explained
+
+The frontend and backend communicate through HTTP endpoints (API routes). The
+core user-facing endpoints handle swiping, movie selection, and recommendations.
+Additional analytics, operations, and task management endpoints power the
+dashboard (see Section 6.2).
 
 ### Overview: Request Flow
 
@@ -471,39 +579,44 @@ Here is the complete request/response flow for each one.
           |  POST /api/swipe
           |  {"movie_id": 155, "direction": "right"}
           +------------------------------------------>
-          |                                          Update session
-          |                                          liked.append(155)
-          |                                          seen.add(155)
+          |                                          Log to swipe_log
+          |                                          Update liked/seen
           <------------------------------------------+
           |  {"status": "ok"}
           |
           |  GET /api/movie
           +------------------------------------------>
-          |                                          Check liked count
-          |                                          >= 3? Aggregate recs
-          |                                          < 3?  Random weighted
+          |                                          >= 3 likes?
+          |                                          → 15% exploration
+          |                                          → 85% profile vector
+          |                                          < 3 likes?
+          |                                          → Random weighted
           <------------------------------------------+
-          |  {"id": 49026, "title": "The Dark Knight Rises", ...}
+          |  {"id": 49026, "title": "...", "source": "model"}
           |
           |  GET /api/recommendations
           +------------------------------------------>
-          |                                          For each liked movie:
-          |                                            get top-10 similar
-          |                                          Aggregate, sort, top 20
+          |                                          Build profile vector
+          |                                          Score entire catalog
+          |                                          MMR re-rank top 20
           <------------------------------------------+
           |  {"recommendations": [...], "liked_count": 4}
           |
-          |  GET /api/stats
+  User clicks ♥ on a rec card
+          |
+          |  POST /api/rec-feedback
+          |  {"movie_id": 550, "direction": "right"}
           +------------------------------------------>
-          |                                          Count liked, disliked,
-          |                                          available recs
+          |                                          Log with source=rec_list
+          |                                          Update liked/seen
+          |                                          Rebuild recs
           <------------------------------------------+
-          |  {"liked": 4, "disliked": 7, "recommendations_count": 38}
+          |  {"status": "ok", "recommendations": [...]}
 ```
 
 ### POST /api/swipe
 
-**Purpose:** Record a user's like or dislike on a movie.
+**Purpose:** Record a user's like or dislike on the main movie card.
 
 **Request:**
 
@@ -514,26 +627,61 @@ Here is the complete request/response flow for each one.
 }
 ```
 
-- `movie_id`: The integer ID of the movie being rated.
-- `direction`: Either `"right"` (like) or `"left"` (dislike).
-
 **Server logic:**
 
-```python
-if req.direction == "right":
-    session["liked"].append(req.movie_id)
-else:
-    session["disliked"].append(req.movie_id)
-session["seen"].add(req.movie_id)
-```
+1. Build a detailed `swipe_log` entry with source, scores, genres, timestamp
+2. Append to `session["swipe_log"]`
+3. Append movie ID to `session["liked"]` or `session["disliked"]`
+4. Add to `session["seen"]`
 
-The movie ID is always added to `seen`, regardless of direction. It is also
-added to either `liked` or `disliked`.
+The log entry captures the `source` from `pending_movie_meta` (set when the
+movie was selected in `get_next_movie()`), so the profile engine knows whether
+this was a random, model, or exploration pick.
 
 **Response:**
 
 ```json
 { "status": "ok" }
+```
+
+### POST /api/rec-feedback
+
+**Purpose:** Record feedback on a recommendation list card.
+
+**Request:**
+
+```json
+{
+  "movie_id": 550,
+  "direction": "left"
+}
+```
+
+**Server logic:**
+
+1. **Duplicate guard**: If movie is already in `seen`, skip state mutation
+   (prevents stale UI from corrupting state)
+2. Build log entry with `source: "rec_list"`
+3. Update `swipe_log`, `liked`/`disliked`, `seen`
+4. Call `_profile_recommendations(n=20)` to get refreshed rec list
+5. Return the new rec list inline — no extra API call needed
+
+**Response:**
+
+```json
+{
+  "status": "ok",
+  "recommendations": [
+    {
+      "id": 155,
+      "title": "The Dark Knight",
+      "similarity_score": 0.7234,
+      "combined_score": 0.6891,
+      ...
+    }
+  ],
+  "liked_count": 5
+}
 ```
 
 ### GET /api/movie
@@ -542,9 +690,10 @@ added to either `liked` or `disliked`.
 
 **Request:** No body or parameters. Just a GET request.
 
-**Server logic:** This is the two-phase selection strategy described in
-Section 3. If there are 3+ liked movies, it runs the aggregation algorithm.
-Otherwise, it picks a random popularity-weighted movie.
+**Server logic:** The three-phase selection strategy from Section 3:
+cold start → exploration (15%) → profile-based recommendation (85%).
+Each response includes a `source` field so the frontend can display
+an "Exploring" or "Model" badge.
 
 **Response (success):**
 
@@ -556,7 +705,8 @@ Otherwise, it picks a random popularity-weighted movie.
   "genres": ["Action", "Crime", "Drama", "Thriller"],
   "vote_average": 7.6,
   "vote_count": 9263,
-  "poster_url": "https://image.tmdb.org/t/p/w500/dEYnvnUfXrqvqeRSqvIEtmzhoA8.jpg"
+  "poster_url": "https://image.tmdb.org/t/p/w500/...",
+  "source": "model"
 }
 ```
 
@@ -566,23 +716,18 @@ Otherwise, it picks a random popularity-weighted movie.
 { "error": "No more movies to show!" }
 ```
 
-Note: The `overview` field is truncated to 500 characters on the server side
-to keep responses compact.
-
 ### GET /api/recommendations
 
 **Purpose:** Return the top 20 recommendations for the sidebar panel.
 
 **Request:** No parameters.
 
-**Server logic:** This uses a slightly different aggregation than
-`get_next_movie()`. For each liked movie, it fetches the top 10 similar movies
-(not 15). It aggregates by `weighted_rating` (not `similarity_score + 0.1 *
-weighted_rating`). It also tracks how many liked movies each recommendation was
-sourced from (the `count` field). The top 20 by aggregate weighted rating are
-returned.
+**Server logic:** Calls `_profile_recommendations(n=20)` which builds the user
+profile vector, scores the entire catalog, and returns the top 20 after MMR
+re-ranking. Each result includes `similarity_score` (cosine sim between the
+user's profile and the movie) and `combined_score` (blended with quality).
 
-**Response (with recommendations):**
+**Response:**
 
 ```json
 {
@@ -594,19 +739,12 @@ returned.
       "genres": ["Drama", "Action", "Crime", "Thriller"],
       "vote_average": 8.2,
       "vote_count": 12269,
-      "poster_url": "https://image.tmdb.org/t/p/w500/..."
+      "poster_url": "...",
+      "similarity_score": 0.7234,
+      "combined_score": 0.6891
     }
   ],
   "liked_count": 4
-}
-```
-
-**Response (no likes yet):**
-
-```json
-{
-  "recommendations": [],
-  "liked_count": 0
 }
 ```
 
@@ -614,18 +752,13 @@ returned.
 
 **Purpose:** Return session statistics for the header display.
 
-**Request:** No parameters.
-
-**Server logic:** Counts liked movies, disliked movies, and the total number
-of unique recommendations currently available (not yet seen by the user).
-
 **Response:**
 
 ```json
 {
   "liked": 4,
   "disliked": 7,
-  "recommendations_count": 38
+  "recommendations_count": 20
 }
 ```
 
@@ -633,15 +766,7 @@ of unique recommendations currently available (not yet seen by the user).
 
 **Purpose:** Clear all session data and start fresh.
 
-**Request:** No parameters.
-
-**Server logic:**
-
-```python
-session["liked"] = []
-session["disliked"] = []
-session["seen"] = set()
-```
+**Server logic:** Resets `liked`, `disliked`, `seen`, and `swipe_log` to empty.
 
 **Response:**
 
@@ -649,12 +774,66 @@ session["seen"] = set()
 { "status": "reset" }
 ```
 
-After this, the frontend clears its local state (recommendations list and stats
-counters) and fetches a new random movie.
+### 6.2 Analytics, Operations, and Dashboard Endpoints
+
+Beyond the core swipe/recommend flow, the app exposes endpoints for analytics,
+model operations, and background task management. These power the dashboard UI
+at `/dashboard`.
+
+#### Analytics Endpoints
+
+| Endpoint                     | Purpose                                                                                                                                                               |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/analytics`         | Session analytics: like rates by source, confusion matrix (TP/FP/FN/TN), swipe buckets, genre distribution, popularity stats, score distributions, calibration curves |
+| `GET /api/analytics/catalog` | Catalog-level: genre distribution, popularity histogram                                                                                                               |
+| `GET /api/analytics/model`   | Model stats: field weights, vocab sizes, sparsity, cosine sim distribution histogram                                                                                  |
+| `GET /api/analytics/offline` | Offline evaluation metrics (cached after first call): Precision@K, NDCG@K, MRR, Serendipity, Coverage, ILD, Novelty, per-genre precision                              |
+
+The session analytics endpoint computes:
+
+- **Like rates** by source (random, model, rec_list) and model lift (model rate / random rate)
+- **Confusion matrix**: TP = liked model/rec_list picks, FP = disliked model/rec_list picks, FN = liked random, TN = disliked random. Derives precision, recall, F1.
+- **Swipe buckets**: Like rate in groups of 5 swipes, showing how engagement evolves over time
+- **Calibration**: Similarity score bins with observed like rate (does higher score = higher like probability?)
+
+#### Operations Endpoints
+
+These trigger heavy operations, either as background tasks (retrain, evaluate,
+gridsearch, fetch-posters, apply-weights) or synchronous quick actions
+(reload-model, reload-data). See doc 04, Section 6 for details.
+
+| Endpoint                             | Type       | What it does                             |
+| ------------------------------------ | ---------- | ---------------------------------------- |
+| `POST /api/operations/retrain`       | Background | Full pipeline + hot-swap model           |
+| `POST /api/operations/evaluate`      | Background | Run all evaluation metrics               |
+| `POST /api/operations/gridsearch`    | Background | 256-combo grid search (cancellable)      |
+| `POST /api/operations/fetch-posters` | Background | Scrape TMDB posters (cancellable)        |
+| `POST /api/operations/apply-weights` | Background | Refit with custom weights + hot-swap     |
+| `POST /api/operations/reload-model`  | Sync       | Load pkl from disk                       |
+| `POST /api/operations/reload-data`   | Sync       | Reload processed CSV + merge poster URLs |
+| `GET /api/model/weights`             | Sync       | Return current field weights             |
+
+#### Task Management Endpoints
+
+Background operations create tasks with unique IDs. The dashboard polls these
+for progress updates.
+
+| Endpoint                      | Purpose                                  |
+| ----------------------------- | ---------------------------------------- |
+| `GET /api/tasks`              | List all tasks with status + active task |
+| `GET /api/tasks/{id}`         | Get progress of a specific task          |
+| `POST /api/tasks/{id}/cancel` | Request cancellation of a running task   |
+
+#### The Dashboard
+
+The dashboard (`/dashboard`, served from `app/static/dashboard.html`) provides
+a visual interface for model analytics, session analytics, and operations. It
+is a separate single-file HTML page (like the main swipe UI) that communicates
+with the same FastAPI backend.
 
 ---
 
-## 6. How the Model "Adapts" to User Preferences
+## 7. How the Model "Adapts" to User Preferences
 
 This is a critical distinction that is easy to misunderstand.
 
@@ -668,61 +847,64 @@ no weights are being adjusted, no new patterns are being learned.
 
 ### What DOES Happen
 
-The "adaptation" is entirely about **which queries** are sent to the fixed
-model. Think of the model as a library catalog and the user's likes as search
-queries:
+The "adaptation" happens through the **user profile vector**. Each interaction
+modifies the profile, which changes how the fixed model's feature space is
+queried:
 
 ```
 Session starts:
-  Model: [fixed cosine similarity matrix for ~9000 movies]
-  Liked: []
-  --> No queries to send. Show random movies.
+  Model: [fixed feature matrix + cosine sim for ~4600 movies]
+  Profile: [zero vector]
+  --> No signal. Show random movies.
 
-User likes "The Dark Knight":
+User likes "The Dark Knight" (random, weight +1.0):
   Model: [unchanged]
-  Liked: ["The Dark Knight"]
-  --> 1 query, but < 3 so still random
+  Profile: [1.0 × TDK_features]
+  --> Profile = "TDK-like". But < 3 likes, still random.
 
-User likes "Inception":
+User dislikes "Scary Movie" (random, weight -0.3):
   Model: [unchanged]
-  Liked: ["The Dark Knight", "Inception"]
-  --> 2 queries, but < 3 so still random
+  Profile: [1.0 × TDK - 0.3 × Scary]
+  --> Profile shifts AWAY from horror/comedy. Still random.
 
-User likes "Interstellar":
+User likes "Inception" (model, weight +2.5):
   Model: [unchanged]
-  Liked: ["The Dark Knight", "Inception", "Interstellar"]
-  --> 3 queries! Now aggregating recs from all 3.
-  --> Model is queried 3 times, results merged.
+  Profile: [1.0 × TDK - 0.3 × Scary + 2.5 × Inception]
+  --> 3+ likes! Profile is now "Nolan thrillers, not horror".
+  --> Scores entire catalog via cosine(profile, all movies).
 
-User likes "The Matrix":
+User likes "Memento" from rec list (weight +3.0):
   Model: [unchanged]
-  Liked: ["The Dark Knight", "Inception", "Interstellar", "The Matrix"]
-  --> 4 queries. Even richer aggregation.
-  --> Movies similar to ALL FOUR liked films rise to the top.
+  Profile: [... + 3.0 × Memento]
+  --> Profile strongly reinforces "twist endings, cerebral".
+  --> Soft penalty active against horror-similar movies.
 ```
 
-### The Analogy
+### The Key Insight
 
-Imagine you walk into a bookstore and tell the clerk: "I liked Harry Potter."
-The clerk suggests other fantasy books. Then you say: "I also liked Sherlock
-Holmes." Now the clerk can triangulate -- you like stories with clever
-protagonists, mystery elements, and British settings. The clerk's knowledge
-(the "model") has not changed. But the _query_ has gotten richer, so the
-suggestions get better.
+The model is a **fixed map** of movie relationships. The profile vector is a
+**moving pointer** on that map. Each swipe adjusts where the pointer aims.
+Likes push it toward clusters of similar movies; dislikes push it away.
 
-MovieMatch works the same way. More likes = more queries to the same fixed
-model = better aggregated results.
+This is different from the old per-title approach where each like was a
+separate query:
 
-### This Is a "Session-Based" Strategy
+```
+Old: 5 liked movies → 5 separate queries → merge results
+New: 5 likes + 3 dislikes → 1 weighted profile → 1 query over entire catalog
+```
+
+### Session-Based, Non-Learning
 
 In recommendation system terminology, this approach is:
 
 - **Session-based:** Preferences only exist for the current session. Close the
   browser, lose your profile.
-- **Non-learning:** The model does not update. It is a static lookup table of
-  movie similarities.
-- **Query-expansion:** Each new like adds another "query" whose results are
-  merged with previous ones.
+- **Non-learning:** The model itself does not update. It is a static feature
+  matrix and similarity lookup.
+- **Profile-based:** A single user profile vector summarizes all feedback and
+  is compared against the entire catalog.
+- **Feedback-weighted:** Different actions carry different evidence strength.
 
 This is different from systems like Netflix or Spotify, which:
 
@@ -732,7 +914,7 @@ This is different from systems like Netflix or Spotify, which:
 
 ---
 
-## 7. Limitations and Possible Improvements
+## 8. Limitations and Possible Improvements
 
 ### Current Limitations
 
@@ -751,32 +933,38 @@ never considers what other users with similar tastes have enjoyed. In practice,
 collaborative filtering often produces better "surprise" recommendations --
 movies you would not have found through content similarity alone.
 
-**4. Dislikes are wasted.** When a user swipes left, the movie is added to
-`seen` so it will not reappear -- but the dislike is not used to _inform_ future
-recommendations. A smarter system could:
-
-- Penalize movies similar to disliked ones
-- Learn "anti-preferences" (user dislikes horror --> reduce horror
-  recommendations)
-- Use dislikes to refine the similarity score
-
-Currently, disliking "Saw" does not reduce the chance of seeing "Hostel" next.
-
-**5. Cold start quality.** During Phase 1, popularity weighting helps, but
+**4. Cold start quality.** During Phase 1, popularity weighting helps, but
 the user might still see movies they find irrelevant. There is no genre
 preference survey, no "pick 5 movies you like" onboarding flow.
 
+**5. Fixed feedback weights.** The weights (1.0, 2.5, 3.0, etc.) were
+hand-tuned based on intuition. In a production system, these would be learned
+from A/B tests or optimized against engagement metrics.
+
+### What Has Been Addressed
+
+Several limitations from earlier versions of the system have been resolved:
+
+| Former Limitation                  | Current Solution                                            |
+| ---------------------------------- | ----------------------------------------------------------- |
+| Dislikes were wasted               | Profile vector uses dislikes as negative weight             |
+| No penalty for similar-to-disliked | Soft penalty halves scores for movies sim > 0.7 to disliked |
+| Echo chamber risk                  | 15% epsilon-greedy exploration breaks filter bubbles        |
+| All likes treated equally          | Source-aware weights: random < model < rec_list             |
+| Rec list was view-only             | Interactive like/dislike buttons on rec cards               |
+
 ### Possible Improvements
 
-| Improvement                     | Difficulty | Impact |
-| ------------------------------- | ---------- | ------ |
-| Per-user sessions (cookies)     | Low        | High   |
-| Database persistence (SQLite)   | Low        | High   |
-| Use dislikes as negative signal | Medium     | Medium |
-| Onboarding genre picker         | Low        | Medium |
-| Collaborative filtering         | High       | High   |
-| Implicit signals (hover time)   | Medium     | Low    |
-| A/B testing of algorithms       | High       | Medium |
+| Improvement                           | Difficulty | Impact |
+| ------------------------------------- | ---------- | ------ |
+| Per-user sessions (cookies)           | Low        | High   |
+| Database persistence (SQLite)         | Low        | High   |
+| Onboarding genre picker               | Low        | Medium |
+| Collaborative filtering               | High       | High   |
+| Temporal decay (recent > older likes) | Medium     | Medium |
+| Implicit signals (hover time, scroll) | Medium     | Low    |
+| A/B testing of algorithms             | High       | Medium |
+| Learned feedback weights              | Medium     | Medium |
 
 ---
 
@@ -786,15 +974,25 @@ The MovieMatch application takes a pre-trained content-based recommendation
 model and wraps it in an interactive feedback loop:
 
 ```
-  +----------+     swipe      +-----------+     query      +-------+
-  |  User    |  ----------->  |  Session  |  ----------->  | Model |
-  |  (browser|                |  State    |                | (fixed|
-  |   card)  |  <-----------  |  (liked,  |  <-----------  |  cos  |
-  +----------+   next movie   |   seen)   |   recs list    |  sim) |
-                               +-----------+                +-------+
+  +----------+     swipe/     +-----------+     profile    +-------+
+  |  User    |  rec-feedback  |  Session  |     vector     | Model |
+  |  (browser|  ----------->  |  State    |  ----------->  | (fixed|
+  |   card + |                |  (log,    |                |  feat |
+  |   rec    |  <-----------  |   liked,  |  <-----------  |  mtx) |
+  |   list)  |   next movie   |   seen)   |  cosine sim    +-------+
+  +----------+   + recs list   +-----------+                    |
+                                    |                           |
+                                    v                           |
+                              +-----------+                     |
+                              | Feedback  |     Exploration     |
+                              | Weights   |     15% random      |
+                              | + Soft    |     breaks echo     |
+                              | Penalty   |     chambers        |
+                              +-----------+                     |
 ```
 
-The model never changes. The session state grows. As the session state grows,
-the model is queried from more angles, and the aggregated results become
-increasingly tailored to the user's taste. This is the central mechanism: a
-fixed model, queried dynamically, producing progressively better results.
+The model never changes. The user profile vector grows and shifts with each
+interaction. As more feedback accumulates, the profile becomes a richer
+representation of the user's taste — capturing both what they like and what
+they dislike. The exploration mechanism ensures the system does not become
+trapped in a narrow slice of the catalog.

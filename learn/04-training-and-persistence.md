@@ -13,7 +13,8 @@ explained from scratch -- no prior machine-learning knowledge is assumed.
 3. [Model Persistence with Pickle](#3-model-persistence-with-pickle)
 4. [Model Loading at App Startup](#4-model-loading-at-app-startup)
 5. [ContentBasedRecommender Class Anatomy](#5-contentbasedrecommender-class-anatomy)
-6. [Limitations of This Approach](#6-limitations-of-this-approach)
+6. [Hot-Swapping and Runtime Operations](#6-hot-swapping-and-runtime-operations)
+7. [Limitations of This Approach](#7-limitations-of-this-approach)
 
 ---
 
@@ -678,7 +679,93 @@ When a user asks for recommendations similar to "The Dark Knight":
 
 ---
 
-## 6. Limitations of This Approach
+## 6. Hot-Swapping and Runtime Operations
+
+### Hot-Swap: Replacing the Model Without Restarting
+
+The application supports **hot-swapping** — replacing the live recommender model
+in memory without restarting the server. This is handled by `_hot_swap_model()`
+in `app/main.py`:
+
+```python
+def _hot_swap_model(new_rec):
+    global recommender, movies_df, offline_cache
+    # Preserve poster URLs from current data
+    if movies_df is not None and "poster_url" in movies_df.columns:
+        poster_map = movies_df.drop_duplicates(subset="id").set_index("id")["poster_url"]
+        new_rec.smd["poster_url"] = new_rec.smd["id"].map(poster_map).fillna("")
+    movies_df = new_rec.smd.copy()
+    recommender = new_rec
+    offline_cache = None   # invalidate cached evaluation results
+```
+
+The function:
+
+1. Carries forward poster URLs from the currently loaded data (so they are not
+   lost when swapping in a freshly trained model that does not have them)
+2. Falls back to `poster_path` for movies still missing `poster_url`
+3. Replaces the global `recommender` and `movies_df` references atomically
+4. Invalidates the offline evaluation cache (since the model changed)
+
+### Background Operations via API
+
+The web app exposes several heavy operations as **background tasks** that run in
+daemon threads. Each operation uses a task management system (`_tasks` dict with
+thread-safe locking) that tracks progress and supports cancellation.
+
+| Endpoint                             | What it does                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------ |
+| `POST /api/operations/retrain`       | Full pipeline: make_dataset + build_features + fit + save pkl + hot-swap |
+| `POST /api/operations/evaluate`      | Run all evaluation metrics on 100 sampled test movies                    |
+| `POST /api/operations/gridsearch`    | Grid search over 256 weight combinations (cancellable)                   |
+| `POST /api/operations/fetch-posters` | Scrape TMDB poster URLs (cancellable, rate-limited)                      |
+| `POST /api/operations/apply-weights` | Refit model with custom weights + save + hot-swap                        |
+| `POST /api/operations/reload-model`  | Load `recommender.pkl` from disk + hot-swap (synchronous)                |
+| `POST /api/operations/reload-data`   | Reload `movies_processed.csv` and merge poster URLs (sync)               |
+
+Background tasks expose their state via:
+
+- `GET /api/tasks` — list all tasks with status
+- `GET /api/tasks/{id}` — get progress of a specific task
+- `POST /api/tasks/{id}/cancel` — request cancellation of a running task
+
+The retrain workflow:
+
+```
+POST /api/operations/retrain
+        |
+        v
+  Background thread:
+    1. make_dataset()          → load + clean raw CSVs
+    2. build_features()        → create text columns
+    3. build_recommender()     → fit TF-IDF + cosine sim
+    4. pickle.dump()           → save to models/recommender.pkl
+    5. _hot_swap_model()       → replace live model
+        |
+        v
+  New model is live (session state preserved)
+```
+
+### Model Introspection
+
+The `get_model_stats()` method on `ContentBasedRecommender` returns training
+metadata for analytics:
+
+```python
+stats = recommender.get_model_stats()
+# Returns: total_movies, field_weights, weighted_rating_params,
+#          vectorizer_stats (type, vocab_size, weight per field),
+#          feature_matrix_shape, feature_matrix_sparsity,
+#          cosine_sim_stats (mean, median, std, p95),
+#          data_quality (empty_count, fill_rate per field)
+```
+
+This is exposed via `GET /api/analytics/model` and powers the dashboard's model
+stats panel.
+
+---
+
+## 7. Limitations of This Approach
 
 ### Cold start for new movies
 

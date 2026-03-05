@@ -14,6 +14,9 @@ than repetitive. We build every concept from the ground up.
 3. [Combined Scoring](#3-combined-scoring)
 4. [MMR -- Diversity Re-ranking](#4-mmr----diversity-re-ranking)
 5. [The Full recommend() Flow](#5-the-full-recommend-flow)
+6. [User Profile Vector](#6-user-profile-vector)
+7. [Soft Penalty for Disliked Content](#7-soft-penalty-for-disliked-content)
+8. [Exploration -- Breaking Echo Chambers](#8-exploration----breaking-echo-chambers)
 
 ---
 
@@ -984,3 +987,408 @@ MMR diversity reranking changed the ordering.
 | Combined score (alpha=0.7)        | Similarity matters most, but quality breaks ties and filters junk        |
 | MMR re-ranking (lambda=0.5)       | Prevents recommendation lists full of near-duplicates                    |
 | 5x over-fetch for candidates      | Gives MMR enough room to find diverse alternatives                       |
+
+---
+
+## 6. User Profile Vector
+
+Sections 1-5 describe the `recommend()` method, which takes a **single movie
+title** as input and returns similar movies. This works well for one-off
+queries, but in the live application users like and dislike _many_ movies over
+a session. How do we combine all that feedback into a single recommendation?
+
+### 6.1 The Problem with Per-Title Aggregation
+
+The original approach (described in doc 05, Section 4) called `recommend()`
+once per liked movie and merged the results:
+
+```
+User liked 5 movies
+  → 5 separate recommend() calls
+  → 5 × 15 = 75 candidate rows
+  → Merge scores, deduplicate, sort
+```
+
+This has two weaknesses:
+
+1. **Dislikes are ignored.** A user who dislikes horror never tells the model
+   "less of this." The disliked movie is simply skipped and never shown again,
+   but similar horror movies keep appearing.
+2. **All likes are equal.** A deliberate "like" on a curated recommendation
+   carries the same weight as a quick swipe-right on a random movie the user
+   barely recognized.
+
+### 6.2 The Profile Vector Concept
+
+Instead of querying the model N times, we build **one vector** that represents
+the user's overall taste, then compare it against every movie in the catalog in
+a single pass.
+
+The core idea: each movie is already a sparse feature vector (from TF-IDF and
+Count vectorizers — see doc 02). If we take a **weighted sum** of the feature
+vectors of all movies the user interacted with, we get a "user profile" in the
+same feature space as the movies.
+
+```
+Profile = Σ  feature_vector[movie_i] × feedback_weight_i
+         i∈swipe_log
+```
+
+### 6.3 Feedback Weights
+
+Not all feedback is equal. The weight depends on two factors:
+
+- **Direction**: right (like) or left (dislike)
+- **Source**: where the user encountered the movie
+
+```
+(direction, source)         Weight    Rationale
+-----------------------------------------------------------------
+("right", "random")          1.0      Baseline: liked a random movie
+("left",  "random")         -0.3      Weak negative: user may not know it
+("right", "model")           2.5      Liked a model pick — strong signal
+("left",  "model")          -1.2      Disliked a model pick — model was wrong
+("right", "rec_list")        3.0      Liked from rec list — most intentional
+("left",  "rec_list")       -1.5      Disliked from rec list — strongest neg
+```
+
+**Why the asymmetry?** Negative weights have smaller magnitude than positive
+because dislikes are noisier. A user might swipe left simply because they have
+already seen the movie, or because the poster looked unfamiliar. A swipe right
+is a more confident signal — the user actively wants to watch it.
+
+**Why source matters?** Liking a random movie you happened to see is a weaker
+signal than deliberately clicking "like" on a curated recommendation in the
+sidebar. The rec-list action is the most intentional (the user evaluated the
+movie without being forced to), so it gets the highest weight.
+
+### 6.4 Building the Profile: Step by Step
+
+Let us walk through a concrete example. The user has made 4 swipes:
+
+```
+Swipe 1: "The Dark Knight"     → right, random      weight = +1.0
+Swipe 2: "Scary Movie"         → left,  random      weight = -0.3
+Swipe 3: "Inception"           → right, model       weight = +2.5
+Swipe 4: "The Prestige"        → right, rec_list    weight = +3.0
+```
+
+Each movie has a sparse feature vector (say, 20,000 dimensions). We compute:
+
+```
+profile = TDK_vector * 1.0
+        + Scary_vector * (-0.3)
+        + Inception_vector * 2.5
+        + Prestige_vector * 3.0
+```
+
+The resulting profile vector is strong in dimensions corresponding to "Nolan",
+"thriller", "crime", "drama", "twist" — features shared by the three liked
+movies. The horror/comedy dimensions from "Scary Movie" are subtracted, making
+horror features slightly negative.
+
+In the code (`app/main.py`, lines 259-266):
+
+```python
+for entry in log:
+    idx = _movie_id_to_idx(entry["movie_id"])
+    if idx is None:
+        continue
+    weight = FEEDBACK_WEIGHTS.get((entry["direction"], entry["source"]), 0.0)
+    if weight == 0.0:
+        continue
+    profile = profile + recommender.feature_matrix[idx] * weight
+```
+
+### 6.5 L2 Normalization
+
+After summing, the profile vector can have very large values (especially after
+many swipes). We **L2-normalize** it — divide by its own magnitude — so that
+its length becomes 1:
+
+```
+                    profile
+profile_norm = ─────────────────
+                ||profile||₂
+```
+
+Where `||profile||₂ = sqrt(sum of squared elements)`.
+
+Why? Cosine similarity is scale-invariant (Section 1.5), but normalizing
+explicitly ensures numerical stability and makes the profile comparable to the
+already-normalized movie vectors in the feature matrix.
+
+```python
+# app/main.py, lines 271-274
+norm = float(profile.multiply(profile).sum() ** 0.5)
+if norm > 0:
+    profile = profile / norm
+```
+
+Edge case: if `profile.nnz == 0` (all weights cancelled out — e.g., user liked
+and disliked identical movies), we return an empty list. There is nothing to
+recommend against a zero vector.
+
+### 6.6 Scoring the Entire Catalog
+
+With the normalized profile in hand, we compute cosine similarity between the
+profile and **every movie** in one call:
+
+```python
+# app/main.py, line 277
+cosine_scores = cosine_similarity(profile, recommender.feature_matrix).flatten()
+```
+
+This yields a 1D array of ~4,600 scores — one per movie. Then the familiar
+combined scoring formula (Section 3):
+
+```
+combined = 0.7 × cosine_score + 0.3 × wr_norm
+```
+
+After excluding seen movies (set to `-inf`) and applying the soft penalty
+(Section 7), the top candidates go through MMR re-ranking (Section 4) for
+diversity.
+
+### 6.7 Profile Vector vs Per-Title Aggregation
+
+```
+Per-Title Aggregation:                Profile Vector:
+
+User liked 5 movies                   User made 12 swipes (5 right, 7 left)
+  → 5 × recommend()                    → 1 weighted vector sum
+  → Only likes used                    → Likes AND dislikes contribute
+  → Equal weight per like              → Source-aware weighting
+  → Results merged by score sum        → Cosine sim vs entire catalog
+  → MMR per-title, then merge          → Single MMR pass over top-100
+  → O(5 × N) similarity lookups        → O(1 × N) + O(N_features) sparse sum
+```
+
+The profile approach is both more expressive (uses negative feedback, variable
+weights) and more efficient (single similarity computation instead of multiple
+recommend() calls).
+
+### 6.8 Performance
+
+Building the profile vector is O(S × F) where S = number of swipes and
+F = number of features — but since the feature matrix is sparse (~20k columns
+but ~99.5% zeros), the actual work is proportional to non-zero entries.
+The `cosine_similarity(1×F, N×F)` call for ~4,600 movies takes under 50ms on
+a modern laptop. The entire `_profile_recommendations()` call completes in
+under 100ms.
+
+---
+
+## 7. Soft Penalty for Disliked Content
+
+### 7.1 The Idea
+
+Section 6 showed how dislikes contribute negative weight to the profile vector.
+But there is a subtlety: a movie can be far from the disliked movie in overall
+feature space yet share specific problematic features (e.g., same director the
+user hates). The profile vector handles this implicitly through the feature
+weights, but we add an **explicit penalty** as a second line of defense.
+
+### 7.2 How It Works
+
+After computing combined scores for all movies, we check: "Is this movie very
+similar to something the user disliked?"
+
+Using the precomputed N×N cosine similarity matrix (Section 1.6):
+
+```python
+# app/main.py, lines 288-299
+disliked_indices = [row_index for each disliked movie_id]
+
+max_sim_to_disliked = np.max(
+    recommender.cosine_sim[:, disliked_indices], axis=1
+)
+penalty_mask = (max_sim_to_disliked > 0.7) & ~seen_mask
+combined[penalty_mask] *= 0.5
+```
+
+For every movie in the catalog, we find the **maximum** cosine similarity
+between that movie and any disliked movie. If this maximum exceeds **0.7**
+(very similar), the movie's combined score is halved.
+
+### 7.3 Worked Example
+
+User disliked "Saw" (horror, torture, gory) and "Hostel" (horror, torture,
+gory).
+
+```
+Movie: "The Texas Chain Saw Massacre"
+  sim to "Saw"    = 0.82  ← above 0.7
+  sim to "Hostel" = 0.75  ← above 0.7
+  max_sim = 0.82 > 0.7
+  → combined_score *= 0.5  (halved!)
+
+Movie: "Get Out"
+  sim to "Saw"    = 0.35
+  sim to "Hostel" = 0.28
+  max_sim = 0.35 < 0.7
+  → No penalty (it's a different kind of horror)
+
+Movie: "Inception"
+  sim to "Saw"    = 0.05
+  sim to "Hostel" = 0.03
+  max_sim = 0.05 < 0.7
+  → No penalty (completely different genre)
+```
+
+### 7.4 Why 0.7 and 0.5?
+
+**Threshold 0.7**: In our similarity matrix, 0.7+ means very strong overlap —
+typically same franchise, same director, or very similar genre+cast+keywords.
+This is aggressive enough to catch near-duplicates of disliked content without
+penalizing movies that merely share one genre.
+
+**Factor 0.5**: Halving (not zeroing) keeps the movie in the candidate pool.
+If the user's profile otherwise strongly favors this movie, it can still
+appear, just ranked lower. This prevents over-correction from a single dislike.
+
+### 7.5 Two Layers of Negative Feedback
+
+The system uses dislikes in **two complementary ways**:
+
+1. **Profile vector** (Section 6): Disliked movies subtract their feature
+   vectors from the profile, reducing similarity to movies with similar
+   features. This is a _global, continuous_ signal.
+
+2. **Soft penalty** (this section): Movies too similar to any specific disliked
+   movie get their score halved. This is a _local, threshold-based_ safety net.
+
+Together, these create robust negative feedback. The profile vector handles the
+general direction ("less horror"), while the soft penalty handles the specific
+cases ("definitely not this exact type of horror").
+
+---
+
+## 8. Exploration -- Breaking Echo Chambers
+
+### 8.1 The Problem
+
+Even with MMR diversity (Section 4), a user who consistently likes the same
+type of movie will see an increasingly narrow slice of the catalog. The profile
+vector reinforces itself: like Nolan → see more Nolan → like more Nolan →
+profile becomes 90% Nolan features → only Nolan-like movies appear.
+
+This is a **filter bubble** or **echo chamber**.
+
+### 8.2 Epsilon-Greedy Exploration
+
+The solution borrows from reinforcement learning: **epsilon-greedy** strategy.
+With probability epsilon (ε = 0.15 = 15%), we ignore the model entirely and
+show a random popularity-weighted movie instead.
+
+```python
+# app/main.py, lines 431-438
+if random.random() < EXPLORATION_RATE:  # EXPLORATION_RATE = 0.15
+    # Show a random movie (popularity-weighted)
+    unseen = movies_df[~movies_df["id"].isin(seen)]
+    weights = unseen["popularity"].clip(lower=0.1)
+    weights = weights / weights.sum()
+    chosen = unseen.sample(n=1, weights=weights)
+    return movie_to_dict(chosen.iloc[0], source="random")
+```
+
+85% of the time (exploitation): the model shows its best recommendation.
+15% of the time (exploration): a random popular movie breaks the pattern.
+
+### 8.3 Why This Works
+
+The random movie might be:
+
+- **A genre the user hasn't tried**: They might discover they love documentaries
+  even though they have only been swiping on action movies.
+- **A disconfirming signal**: If the user dislikes the random pick, it adds
+  negative weight to the profile, helping the model learn what to avoid.
+- **A confirming signal**: If the user likes it, the profile broadens, leading
+  to more diverse future recommendations.
+
+### 8.4 Why 15%?
+
+This is a practical balance:
+
+```
+ε = 0%   →  Pure exploitation. Echo chamber guaranteed.
+ε = 5%   →  Very rare exploration. Mostly same bubble.
+ε = 15%  →  Roughly 1 in 7 movies is random. Noticeable variety
+             without feeling random.
+ε = 50%  →  Half random. System feels broken — "why is it showing
+             me movies I didn't ask for?"
+```
+
+At 15%, a user who swipes 20 movies will see about 3 random picks. This is
+enough to occasionally break the pattern without undermining trust in the
+recommendation system.
+
+### 8.5 Exploration Only in Model Phase
+
+Exploration is only active after 3+ likes (when the model phase begins). During
+cold start (< 3 likes), all movies are already random — there is no bubble to
+break.
+
+```
+                    User requests next movie
+                              |
+                              v
+                   +----------------------+
+                   | Liked count >= 3?    |
+                   +----------------------+
+                      |              |
+                    No             Yes
+                      |              |
+                      v              v
+               Random movie   Roll dice: random() < 0.15?
+               (cold start)      |              |
+                               Yes            No
+                                 |              |
+                                 v              v
+                          Random movie    Profile-based
+                          (exploration)   recommendation
+```
+
+---
+
+## Summary of the Full Scoring Pipeline
+
+The complete pipeline, combining all concepts from this document:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  TRAINING TIME (once)                                                │
+│                                                                      │
+│  Per-field TF-IDF/Count → weighted sparse feature matrix → cosine   │
+│  similarity N×N matrix → IMDB weighted ratings → wr_norm [0,1]      │
+│                                                                      │
+│  Stored in: recommender.pkl                                          │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  QUERY TIME (per request)                                            │
+│                                                                      │
+│  1. Build user profile: Σ feature_matrix[i] × feedback_weight       │
+│  2. L2-normalize profile                                             │
+│  3. Cosine similarity: profile vs all N movies                       │
+│  4. Combined score: 0.7 × cosine + 0.3 × wr_norm                   │
+│  5. Hard exclude: seen movies → -inf                                 │
+│  6. Soft penalty: sim > 0.7 to disliked → score × 0.5              │
+│  7. MMR re-rank top candidates for diversity                         │
+│  8. Return top-N diverse, high-quality, taste-matching movies        │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+| Decision                          | Why                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| Cosine similarity (not Euclidean) | Magnitude-invariant: focuses on feature proportions, not absolute counts |
+| Precomputed N×N matrix            | Expensive once at training, instant lookups at query time                |
+| IMDB weighted rating              | Prevents low-vote movies from dominating via unreliable high averages    |
+| Combined score (alpha=0.7)        | Similarity matters most, quality breaks ties                             |
+| MMR re-ranking (lambda=0.5)       | Prevents recommendation lists full of near-duplicates                    |
+| User profile vector               | Single representation of all feedback, not per-title queries             |
+| Asymmetric feedback weights       | Dislikes are noisier than likes, so carry less magnitude                 |
+| Source-aware weights              | Intentional rec-list feedback > passive swipe on random                  |
+| Soft penalty for disliked content | Second defense layer beyond profile vector subtraction                   |
+| 15% exploration rate              | Epsilon-greedy prevents filter bubbles without breaking UX               |

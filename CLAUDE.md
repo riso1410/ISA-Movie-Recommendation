@@ -61,3 +61,5 @@ src/models/evaluate_model.py   → Precision@K, NDCG@K, Coverage, Intra-List Div
 
 `docs/plans/` — Design doc and implementation plan with 3-iteration approach.
 `docs/evaluation_report.md` — Evaluation results and analysis.
+`learn/` — Educational markdown docs (00-06) explaining each system component.
+`reports/figures/` — Generated evaluation/EDA visualizations (PNGs).

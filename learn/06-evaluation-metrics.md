@@ -8,9 +8,12 @@
 4. [Coverage](#4-coverage)
 5. [Intra-List Diversity (ILD)](#5-intra-list-diversity-ild)
 6. [Novelty](#6-novelty)
-7. [Grid Search for Weight Optimization](#7-grid-search-for-weight-optimization)
-8. [The Evaluation Procedure](#8-the-evaluation-procedure)
-9. [Actual Results from Our System](#9-actual-results-from-our-system)
+7. [Serendipity@K](#7-serendipityk)
+8. [Mean Reciprocal Rank (MRR)](#8-mean-reciprocal-rank-mrr)
+9. [Per-Genre Precision](#9-per-genre-precision)
+10. [Grid Search for Weight Optimization](#10-grid-search-for-weight-optimization)
+11. [The Evaluation Procedure](#11-the-evaluation-procedure)
+12. [Actual Results from Our System](#12-actual-results-from-our-system)
 
 ---
 
@@ -656,7 +659,178 @@ Key details:
 
 ---
 
-## 7. Grid Search for Weight Optimization
+## 7. Serendipity@K
+
+### What it measures
+
+Serendipity captures both **surprise and relevance** simultaneously. A novel but irrelevant recommendation is not serendipitous -- it is just random. A relevant but expected recommendation is useful but not serendipitous. Serendipity rewards recommendations that are **unexpectedly good**.
+
+### The formula
+
+For each recommended movie:
+
+```
+serendipity = unexpectedness x relevance
+```
+
+Where:
+
+- `unexpectedness = 1 - normalized_popularity` (less popular = more unexpected)
+- `relevance = 1` if the movie shares at least one genre with the query, else `0`
+
+The overall Serendipity@K is the mean across all recommendations across all test queries.
+
+### Intuition
+
+```
+                  Relevant    Not Relevant
+Unexpected        Serendipitous!   Just noise
+Expected          Useful           Useless
+```
+
+A popular, relevant movie (e.g., recommending Avengers to a Marvel fan) gets low serendipity because `unexpectedness` is near zero. An obscure but relevant movie (a little-known crime thriller recommended to someone who liked The Dark Knight) scores high on both factors.
+
+### Worked example
+
+Query movie: The Dark Knight (genres: Action, Crime, Drama, Thriller). Max popularity in catalog = 500.
+
+```
+Movie                  | Popularity | Unexpectedness     | Genre overlap? | Serendipity
+-----------------------+------------+--------------------+----------------+------------
+Avengers: Endgame      |    500     | 1 - 500/500 = 0.00| Yes            | 0.00 x 1 = 0.00
+Training Day           |     30     | 1 - 30/500 = 0.94 | Yes            | 0.94 x 1 = 0.94
+My Neighbor Totoro     |     40     | 1 - 40/500 = 0.92 | No             | 0.92 x 0 = 0.00
+Thursday               |      5     | 1 - 5/500 = 0.99  | Yes            | 0.99 x 1 = 0.99
+```
+
+Mean serendipity = (0.00 + 0.94 + 0.00 + 0.99) / 4 = **0.48**
+
+### How the code works
+
+```python
+def serendipity_at_k(recommender, test_movies, popularity_scores, k=10):
+    for _, row in test_movies.iterrows():
+        recs = recommender.recommend(title, n=k)
+        for _, rec_row in recs.iterrows():
+            relevance = 1.0 if _genre_overlap(true_genres, rec_genres) > 0 else 0.0
+            p = float(pop_by_title.get(rec_row['title'], 0.5))
+            unexpectedness = 1.0 - p
+            scores.append(unexpectedness * relevance)
+    return np.mean(scores)
+```
+
+### How serendipity differs from novelty
+
+- **Novelty** measures surprise regardless of relevance (log-based, all recommendations count)
+- **Serendipity** requires both surprise AND relevance (multiplicative, irrelevant items score 0)
+
+A system with high novelty but low serendipity recommends many obscure movies that are not relevant. A system with high serendipity finds hidden gems the user would actually enjoy.
+
+---
+
+## 8. Mean Reciprocal Rank (MRR)
+
+### What it measures
+
+MRR answers: **How far down the list does the user have to scroll before finding the first relevant recommendation?**
+
+Unlike Precision@K (which counts all relevant items) or NDCG (which cares about the full ranking), MRR focuses exclusively on the **position of the first hit**.
+
+### The formula
+
+For a single query:
+
+```
+                    1
+Reciprocal Rank = ─────
+                   rank
+
+where rank = position of the first relevant item (1-indexed)
+```
+
+MRR is the mean of reciprocal ranks across all test queries.
+
+### Worked example
+
+```
+Query 1: First relevant item at position 1  →  RR = 1/1 = 1.000
+Query 2: First relevant item at position 3  →  RR = 1/3 = 0.333
+Query 3: First relevant item at position 1  →  RR = 1/1 = 1.000
+Query 4: No relevant items in top 10        →  RR = 0.000
+
+MRR = (1.000 + 0.333 + 1.000 + 0.000) / 4 = 0.583
+```
+
+### Why MRR matters
+
+MRR captures the user's **first impression**. Even if Precision@10 is 0.90, if the one irrelevant item happens to be at position 1, the user's first experience is bad. MRR penalizes this heavily.
+
+### How the code works
+
+```python
+def mean_reciprocal_rank(recommender, test_movies, k=10):
+    for _, row in test_movies.iterrows():
+        recs = recommender.recommend(title, n=k)
+        for rank, (_, rec_row) in enumerate(recs.iterrows(), 1):
+            if _genre_overlap(true_genres, rec_genres) > 0:
+                rr_scores.append(1.0 / rank)
+                break
+        else:
+            rr_scores.append(0.0)   # no relevant item found
+    return np.mean(rr_scores)
+```
+
+The `for...else` pattern: the `else` block runs only if the loop completes without `break` — meaning no relevant item was found in the top K.
+
+---
+
+## 9. Per-Genre Precision
+
+### What it measures
+
+Per-Genre Precision breaks down Precision@K by individual genre. Instead of one aggregate number, it shows how well the system performs for each genre category.
+
+### Why it matters
+
+A system with Precision@10 = 0.90 overall might be excellent for Action movies (0.98) but poor for Documentary (0.60). Per-genre breakdown reveals these disparities. This is important because:
+
+- Users who like niche genres deserve good recommendations too
+- It highlights which genres the system struggles with (possibly due to sparse data)
+- It guides targeted improvements (e.g., increasing keyword weight might help documentaries)
+
+### How it works
+
+For each test movie, the function computes Precision@K as usual. It then attributes that precision score to **every genre** the test movie belongs to. Genres with fewer than 3 test movies are excluded to avoid noisy estimates.
+
+```python
+def per_genre_precision(recommender, test_movies, k=10):
+    genre_results = {}
+    for _, row in test_movies.iterrows():
+        # Compute precision for this query
+        prec = relevant / k
+        # Attribute to each of this movie's genres
+        for g in true_genres:
+            genre_results.setdefault(g, []).append(prec)
+    # Average per genre, require at least 3 samples
+    return {g: np.mean(v) for g, v in genre_results.items() if len(v) >= 3}
+```
+
+### Example output
+
+```
+Genre          | Precision@10 | # Test Movies
+---------------+--------------+--------------
+Action         |     0.9850   |     42
+Drama          |     0.9920   |     58
+Comedy         |     0.9780   |     35
+Horror         |     0.9500   |     12
+Documentary    |     0.8200   |      5
+Animation      |     0.9600   |      8
+```
+
+---
+
+## 10. Grid Search for Weight Optimization
 
 ### What problem does it solve?
 
@@ -799,7 +973,7 @@ Things to look for:
 
 ---
 
-## 8. The Evaluation Procedure
+## 11. The Evaluation Procedure
 
 ### The `if __name__ == '__main__'` block
 
@@ -853,7 +1027,7 @@ Using a fixed seed makes results **reproducible**. Anyone running the same code 
 
 ```python
 def evaluate_all(recommender, test_movies, k=10):
-    catalog_size = len(recommender.smd)                     # total movies
+    catalog_size = len(recommender.smd)
     pop_scores = pd.to_numeric(recommender.smd['popularity'], errors='coerce').fillna(0.0)
 
     return {
@@ -862,10 +1036,13 @@ def evaluate_all(recommender, test_movies, k=10):
         'coverage':              coverage(recommender, test_movies, catalog_size, k),
         'intra_list_diversity':  intra_list_diversity(recommender, test_movies, k),
         'novelty':               novelty(recommender, test_movies, pop_scores, k),
+        'serendipity_at_k':      serendipity_at_k(recommender, test_movies, pop_scores, k),
+        'mrr':                   mean_reciprocal_rank(recommender, test_movies, k),
+        'per_genre_precision':   per_genre_precision(recommender, test_movies, k),
     }
 ```
 
-All five metrics are computed on the same test set, so results are directly comparable.
+All eight metrics are computed on the same test set, so results are directly comparable.
 
 ### Interpreting the output
 
@@ -878,21 +1055,27 @@ The output looks like:
   coverage: 0.1510
   intra_list_diversity: 0.7290
   novelty: 6.0990
+  serendipity_at_k: 0.6340
+  mrr: 0.9850
+  per_genre_precision: {Action: 0.985, Drama: 0.992, ...}
 ```
 
 How to read each number:
 
-| Metric               | Value                                                 | Meaning                                            |
-| -------------------- | ----------------------------------------------------- | -------------------------------------------------- |
-| Precision@10 = 0.992 | 99.2% of recommendations share a genre with the query | Near-perfect genre relevance                       |
-| NDCG@10 = 0.965      | Ranking is 96.5% of ideal                             | High-overlap items appear near the top             |
-| Coverage = 0.151     | 15.1% of catalog gets recommended                     | Moderate; most movies are too dissimilar to appear |
-| ILD = 0.729          | Items within lists are moderately diverse             | Not all identical, but genre-coherent              |
-| Novelty = 6.099      | Average ~6 bits of self-information                   | Recommends fairly obscure movies                   |
+| Metric                 | Value                                                 | Meaning                                            |
+| ---------------------- | ----------------------------------------------------- | -------------------------------------------------- |
+| Precision@10 = 0.992   | 99.2% of recommendations share a genre with the query | Near-perfect genre relevance                       |
+| NDCG@10 = 0.965        | Ranking is 96.5% of ideal                             | High-overlap items appear near the top             |
+| Coverage = 0.151       | 15.1% of catalog gets recommended                     | Moderate; most movies are too dissimilar to appear |
+| ILD = 0.729            | Items within lists are moderately diverse             | Not all identical, but genre-coherent              |
+| Novelty = 6.099        | Average ~6 bits of self-information                   | Recommends fairly obscure movies                   |
+| Serendipity@10 = 0.634 | Combines unexpectedness with relevance                | Finds surprising relevant movies                   |
+| MRR = 0.985            | First relevant item is almost always at position 1    | Excellent first-hit placement                      |
+| Per-Genre Precision    | Breakdown by genre                                    | Shows genre-level performance variation            |
 
 ---
 
-## 9. Actual Results from Our System
+## 12. Actual Results from Our System
 
 The evaluation report compares two versions of the recommender: V3 (single soup-based TF-IDF) and V4 (per-field vectorizers with explicit weights):
 
@@ -974,6 +1157,9 @@ The evaluation report includes a concrete comparison:
 | NDCG@K               | Are the BEST items ranked      | [0, 1]    | > 0.8        |
 |                      | highest?                       |           |              |
 +──────────────────────+────────────────────────────────+───────────+──────────────+
+| MRR                  | How quickly does the first     | [0, 1]    | > 0.9        |
+|                      | relevant item appear?          |           |              |
++──────────────────────+────────────────────────────────+───────────+──────────────+
 | Coverage             | Fraction of catalog ever       | [0, 1]    | Higher is    |
 |                      | recommended                    |           | better       |
 +──────────────────────+────────────────────────────────+───────────+──────────────+
@@ -982,6 +1168,12 @@ The evaluation report includes a concrete comparison:
 +──────────────────────+────────────────────────────────+───────────+──────────────+
 | Novelty              | How surprising/obscure are     | [0, inf)  | Higher is    |
 |                      | the recommendations? (bits)    |           | more novel   |
++──────────────────────+────────────────────────────────+───────────+──────────────+
+| Serendipity@K        | Unexpected AND relevant        | [0, 1]    | Higher is    |
+|                      | recommendations?               |           | better       |
++──────────────────────+────────────────────────────────+───────────+──────────────+
+| Per-Genre Precision  | Precision broken down by       | [0, 1]    | Even across  |
+|                      | individual genre category      | per genre | genres       |
 +──────────────────────+────────────────────────────────+───────────+──────────────+
 ```
 
