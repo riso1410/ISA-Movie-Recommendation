@@ -1,6 +1,30 @@
 Getting started
 ===============
 
-This is where you describe how to get set up on a clean install, including the
-commands necessary to get the raw data (using the `sync_data_from_s3` command,
-for example), and then how to make the cleaned, final data sets.
+Install dependencies with:
+
+.. code-block:: bash
+
+   uv sync
+
+Download the Kaggle dataset into ``data/raw/`` with these files:
+
+- ``movies_metadata.csv``
+- ``credits.csv``
+- ``keywords.csv``
+- ``links_small.csv``
+
+Generate recommender models before starting the app:
+
+.. code-block:: bash
+
+   uv run python -m src.models.train_model
+
+Run the web app:
+
+.. code-block:: bash
+
+   uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+The FastAPI app loads prebuilt models from ``models/`` at startup. It does not
+train models during startup or while serving requests.

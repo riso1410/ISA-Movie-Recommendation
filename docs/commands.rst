@@ -1,10 +1,27 @@
 Commands
 ========
 
-The Makefile contains the central entry points for common tasks related to this project.
+Common project commands:
 
-Syncing data to S3
+Setup and training
 ^^^^^^^^^^^^^^^^^^
 
-* `make sync_data_to_s3` will use `aws s3 sync` to recursively sync files in `data/` up to `s3://[OPTIONAL] your-bucket-for-syncing-data (do not include 's3://')/data/`.
-* `make sync_data_from_s3` will use `aws s3 sync` to recursively sync files from `s3://[OPTIONAL] your-bucket-for-syncing-data (do not include 's3://')/data/` to `data/`.
+.. code-block:: bash
+
+   uv sync
+   uv run python -m src.models.train_model
+
+App runtime
+^^^^^^^^^^^
+
+.. code-block:: bash
+
+   uv run uvicorn app.main:app --reload
+
+Notebook and evaluation
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: bash
+
+   uv run jupyter notebook
+   uv run python -m src.models.evaluate_model

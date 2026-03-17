@@ -1362,7 +1362,7 @@ The complete pipeline, combining all concepts from this document:
 │  Per-field TF-IDF/Count → weighted sparse feature matrix → cosine   │
 │  similarity N×N matrix → IMDB weighted ratings → wr_norm [0,1]      │
 │                                                                      │
-│  Stored in: recommender.pkl                                          │
+│  Stored in: recommender_<mode>.pkl                                   │
 └─────────────────────────────────────────────────────────────────────┘
                               │
                               ▼

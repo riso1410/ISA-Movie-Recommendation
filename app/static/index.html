@@ -38,7 +38,6 @@
         padding: 20px;
       }
 
-      /* Header */
       .header {
         display: flex;
         justify-content: space-between;
@@ -104,30 +103,39 @@
         color: rgba(255, 255, 255, 0.6);
         border: 1px solid rgba(255, 255, 255, 0.15);
       }
-      .nav-link {
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        color: #fff;
-        padding: 8px 16px;
-        border-radius: 20px;
+
+      .tab-bar {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        margin-bottom: 24px;
+      }
+      .tab-btn {
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.45);
+        padding: 10px 24px;
         cursor: pointer;
         font-family: inherit;
-        font-size: 13px;
-        text-decoration: none;
-        transition: all 0.3s;
+        font-size: 14px;
+        font-weight: 600;
+        border-bottom: 3px solid transparent;
+        transition: all 0.2s;
       }
-      .nav-link:hover {
-        background: rgba(255, 255, 255, 0.2);
+      .tab-btn:hover {
+        color: rgba(255, 255, 255, 0.75);
+      }
+      .tab-btn.active {
+        color: #fff;
+        border-bottom-color: #ff6b6b;
       }
 
-      /* Main layout */
       .main-content {
         display: flex;
         gap: 30px;
         align-items: flex-start;
       }
 
-      /* Swipe area */
       .swipe-area {
         flex: 0 0 400px;
         display: flex;
@@ -135,7 +143,6 @@
         align-items: center;
       }
 
-      /* Movie card */
       .card-container {
         width: 360px;
         height: 540px;
@@ -227,7 +234,6 @@
         overflow: hidden;
       }
 
-      /* Swipe overlays */
       .swipe-overlay {
         position: absolute;
         top: 50%;
@@ -253,7 +259,6 @@
         transform: translateY(-50%) rotate(15deg);
       }
 
-      /* Action buttons */
       .action-buttons {
         display: flex;
         gap: 30px;
@@ -291,7 +296,6 @@
         transform: scale(1.15);
       }
 
-      /* Recommendations panel */
       .recommendations {
         flex: 1;
         min-width: 300px;
@@ -322,6 +326,7 @@
           transform 0.3s,
           box-shadow 0.3s;
         cursor: default;
+        position: relative;
       }
       .rec-card:hover {
         transform: translateY(-5px);
@@ -357,10 +362,6 @@
         color: #ffd43b;
       }
 
-      /* Rec card overlay */
-      .rec-card {
-        position: relative;
-      }
       .rec-overlay {
         position: absolute;
         top: 0;
@@ -412,7 +413,6 @@
         transform: scale(1.15);
       }
 
-      /* Rec card flash animations */
       .rec-card.flash-like {
         animation: recFlashLike 0.4s ease forwards;
       }
@@ -452,7 +452,6 @@
         }
       }
 
-      /* Loading state */
       .loading {
         display: flex;
         align-items: center;
@@ -489,7 +488,6 @@
         font-size: 14px;
       }
 
-      /* Card exit animations */
       .card-exit-right {
         animation: exitRight 0.4s ease forwards;
       }
@@ -522,7 +520,116 @@
         }
       }
 
-      /* Responsive */
+      .analysis-container {
+        max-width: 900px;
+        margin: 0 auto;
+      }
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 32px;
+      }
+      .metric-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        text-align: center;
+      }
+      .metric-name {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.45);
+        margin-bottom: 8px;
+        letter-spacing: 0.5px;
+      }
+      .metric-value {
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .metric-bar-wrap {
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 4px;
+        height: 5px;
+        width: 100%;
+        margin-bottom: 8px;
+      }
+      .metric-bar {
+        height: 5px;
+        border-radius: 4px;
+      }
+      .metric-desc {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.4);
+        line-height: 1.4;
+      }
+      .section-title {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 16px;
+        color: rgba(255, 255, 255, 0.8);
+      }
+      .genre-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+      .genre-table th {
+        padding: 10px 12px;
+        text-align: left;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.45);
+        font-size: 11px;
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+      .genre-table td {
+        padding: 9px 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        color: rgba(255, 255, 255, 0.85);
+      }
+      .genre-bar-wrap {
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 4px;
+        height: 6px;
+        width: 100%;
+      }
+      .genre-bar {
+        height: 6px;
+        border-radius: 4px;
+        background: linear-gradient(90deg, #ff6b6b, #ee5a24);
+      }
+      .glass-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 24px;
+      }
+
+      .model-select {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #fff;
+        padding: 8px 12px;
+        border-radius: 20px;
+        font-family: inherit;
+        font-size: 13px;
+        cursor: pointer;
+        outline: none;
+        transition: all 0.3s;
+      }
+      .model-select:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+      .model-select option {
+        background: #1a1a2e;
+        color: #fff;
+      }
+
       @media (max-width: 900px) {
         .main-content {
           flex-direction: column;
@@ -542,13 +649,473 @@
     <script type="text/babel">
       const { useState, useEffect, useRef, useCallback } = React;
 
-      const API = ""; // Same origin
+      const API = "";
+
+      function MainTab({
+        movie,
+        loading,
+        recommendations,
+        stats,
+        exitDir,
+        dragX,
+        setDragX,
+        feedbackId,
+        feedbackDir,
+        handleSwipe,
+        handleRecFeedback,
+        onMouseDown,
+        onMouseMove,
+        onMouseUp,
+      }) {
+        const likeOpacity = Math.min(Math.max(dragX / 100, 0), 1);
+        const nopeOpacity = Math.min(Math.max(-dragX / 100, 0), 1);
+
+        return (
+          <div className="main-content">
+            <div className="swipe-area">
+              <div className="card-container">
+                {loading ? (
+                  <div className="loading">
+                    <div className="spinner"></div>
+                    Loading...
+                  </div>
+                ) : movie ? (
+                  <div
+                    className={`movie-card ${exitDir === "right" ? "card-exit-right" : ""} ${exitDir === "left" ? "card-exit-left" : ""} ${!exitDir ? "card-enter" : ""} ${dragX > 50 ? "swiping-right" : ""} ${dragX < -50 ? "swiping-left" : ""}`}
+                    style={
+                      !exitDir
+                        ? {
+                            transform: `translateX(${dragX}px) rotate(${dragX * 0.05}deg)`,
+                          }
+                        : {}
+                    }
+                    onMouseDown={onMouseDown}
+                    onMouseMove={onMouseMove}
+                    onMouseUp={onMouseUp}
+                    onMouseLeave={onMouseUp}
+                  >
+                    <div
+                      className="swipe-overlay swipe-like"
+                      style={{ opacity: likeOpacity }}
+                    >
+                      LIKE
+                    </div>
+                    <div
+                      className="swipe-overlay swipe-nope"
+                      style={{ opacity: nopeOpacity }}
+                    >
+                      NOPE
+                    </div>
+
+                    {movie.source && (
+                      <div
+                        className={`source-badge ${movie.source === "model" ? "model" : "random"}`}
+                      >
+                        {movie.source === "model" ? "AI Pick" : "Exploring"}
+                      </div>
+                    )}
+
+                    {movie.poster_url ? (
+                      <img
+                        className="card-poster"
+                        src={movie.poster_url}
+                        alt={movie.title}
+                        onError={(e) => {
+                          e.target.style.display = "none";
+                          e.target.nextSibling.style.display = "flex";
+                        }}
+                      />
+                    ) : null}
+                    <div
+                      className="card-no-poster"
+                      style={movie.poster_url ? { display: "none" } : {}}
+                    >
+                      &#127909;
+                    </div>
+
+                    <div className="card-overlay">
+                      <div className="card-title">{movie.title}</div>
+                      <div className="card-genres">
+                        {(movie.genres || []).slice(0, 4).map((g, i) => (
+                          <span key={i} className="genre-badge">
+                            {g}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="card-rating">
+                        <span className="rating-star">&#9733;</span>
+                        {movie.vote_average?.toFixed(1)} ({movie.vote_count}{" "}
+                        votes)
+                      </div>
+                      <div className="card-overview">{movie.overview}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="loading">No more movies!</div>
+                )}
+              </div>
+
+              <div className="action-buttons">
+                <button
+                  className="action-btn btn-dislike"
+                  onClick={() => handleSwipe("left")}
+                >
+                  &#x2718;
+                </button>
+                <button
+                  className="action-btn btn-like"
+                  onClick={() => handleSwipe("right")}
+                >
+                  &#x2764;
+                </button>
+              </div>
+            </div>
+
+            <div className="recommendations">
+              <div className="rec-header">&#127775; Your Recommendations</div>
+              {stats.liked >= 3 ? (
+                <div className="rec-subtitle">
+                  Based on your {stats.liked} liked movies
+                </div>
+              ) : (
+                <div className="rec-subtitle">
+                  Like {3 - stats.liked} more movie
+                  {3 - stats.liked !== 1 ? "s" : ""} to get personalized
+                  recommendations
+                </div>
+              )}
+
+              {recommendations.length > 0 ? (
+                <div className="rec-grid">
+                  {recommendations.map((rec, i) => (
+                    <div
+                      key={rec.id || i}
+                      className={`rec-card${feedbackId === rec.id && feedbackDir === "right" ? " flash-like" : ""}${feedbackId === rec.id && feedbackDir === "left" ? " flash-dislike" : ""}`}
+                    >
+                      {rec.poster_url ? (
+                        <img
+                          className="rec-poster"
+                          src={rec.poster_url}
+                          alt={rec.title}
+                          onError={(e) => {
+                            e.target.style.display = "none";
+                            e.target.nextSibling.style.display = "flex";
+                          }}
+                        />
+                      ) : null}
+                      <div
+                        className="rec-no-poster"
+                        style={rec.poster_url ? { display: "none" } : {}}
+                      >
+                        &#127909;
+                      </div>
+                      <div className="rec-overlay">
+                        <button
+                          className="rec-overlay-btn dislike"
+                          onClick={() => handleRecFeedback(rec.id, "left")}
+                          title="Dislike"
+                        >
+                          &#x2718;
+                        </button>
+                        <button
+                          className="rec-overlay-btn like"
+                          onClick={() => handleRecFeedback(rec.id, "right")}
+                          title="Like"
+                        >
+                          &#x2764;
+                        </button>
+                      </div>
+                      <div className="rec-info">
+                        <div className="rec-title">{rec.title}</div>
+                        <div className="rec-rating">
+                          &#9733; {rec.vote_average?.toFixed(1)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="no-recs">
+                  <div className="no-recs-icon">&#128253;</div>
+                  <div className="no-recs-text">
+                    {stats.liked >= 3
+                      ? "Computing recommendations..."
+                      : "Swipe right on movies you like!"}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      const METRIC_META = {
+        precision_at_k: {
+          label: "Precision@10",
+          desc: "Fraction of recommended movies sharing at least one genre with the query movie",
+          color: "#51cf66",
+        },
+        ndcg_at_k: {
+          label: "NDCG@10",
+          desc: "Normalized Discounted Cumulative Gain measuring ranking quality by genre overlap",
+          color: "#74c0fc",
+        },
+        mrr: {
+          label: "MRR",
+          desc: "Mean Reciprocal Rank - average 1/position of the first relevant recommendation",
+          color: "#ffd43b",
+        },
+        coverage: {
+          label: "Coverage",
+          desc: "Fraction of the full catalog that appears in at least one recommendation list",
+          color: "#da77f2",
+        },
+        intra_list_diversity: {
+          label: "Diversity",
+          desc: "1 - mean pairwise cosine similarity within recommendation lists (higher = more diverse)",
+          color: "#ff922b",
+        },
+        novelty: {
+          label: "Novelty",
+          desc: "Average inverse popularity (-log2) of recommended items (higher = less mainstream)",
+          color: "#20c997",
+        },
+        serendipity_at_k: {
+          label: "Serendipity@10",
+          desc: "Unexpectedness x relevance - how surprising yet relevant recommendations are",
+          color: "#f06595",
+        },
+      };
+
+      function SessionMetrics() {
+        const [data, setData] = useState(null);
+
+        const fetchSession = useCallback(async () => {
+          try {
+            const res = await fetch(`${API}/api/analytics/session`);
+            if (res.ok) setData(await res.json());
+          } catch (e) {
+            console.error(e);
+          }
+        }, []);
+
+        useEffect(() => {
+          fetchSession();
+          const id = setInterval(fetchSession, 5000);
+          return () => clearInterval(id);
+        }, [fetchSession]);
+
+        if (!data || data.total_swipes < 1) {
+          return (
+            <div className="glass-card" style={{ marginBottom: 32 }}>
+              <div className="section-title">Session Metrics (Live)</div>
+              <div style={{ textAlign: "center", padding: "24px 0", color: "rgba(255,255,255,0.4)", fontSize: 14 }}>
+                Not enough data. Start swiping to see live session metrics.
+              </div>
+            </div>
+          );
+        }
+
+        const sb = data.source_breakdown || {};
+        const cards = [
+          { label: "Total Swipes", value: data.total_swipes, color: "#74c0fc" },
+          { label: "Like Rate", value: (data.like_rate * 100).toFixed(1) + "%", color: "#51cf66" },
+          { label: "Model Like Rate", value: (data.model_like_rate * 100).toFixed(1) + "%", color: "#51cf66" },
+          { label: "Model Lift", value: data.model_lift != null ? data.model_lift + "x" : "N/A", color: "#ffd43b" },
+          { label: "Random Swipes", value: (sb.random || {}).swipes || 0, color: "#da77f2" },
+          { label: "Model Swipes", value: (sb.model || {}).swipes || 0, color: "#da77f2" },
+        ];
+
+        return (
+          <div className="glass-card" style={{ marginBottom: 32 }}>
+            <div className="section-title">Session Metrics (Live)</div>
+            <div className="metric-grid">
+              {cards.map((c, i) => (
+                <div key={i} className="metric-card">
+                  <div className="metric-name">{c.label}</div>
+                  <div className="metric-value" style={{ color: c.color }}>{c.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+
+      function AnalysisTab() {
+        const [metrics, setMetrics] = useState(null);
+        const [loading, setLoading] = useState(false);
+        const [error, setError] = useState(null);
+
+        const fetchMetrics = useCallback(async () => {
+          setLoading(true);
+          setError(null);
+          try {
+            const res = await fetch(`${API}/api/analytics/offline`);
+            if (!res.ok) throw new Error("Failed to fetch metrics");
+            const data = await res.json();
+            setMetrics(data);
+          } catch (e) {
+            setError(e.message);
+          }
+          setLoading(false);
+        }, []);
+
+        useEffect(() => {
+          fetchMetrics();
+        }, [fetchMetrics]);
+
+        if (loading) {
+          return (
+            <div className="analysis-container">
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "80px 20px",
+                  gap: 12,
+                  color: "rgba(255,255,255,0.5)",
+                }}
+              >
+                <div className="spinner"></div>
+                Computing evaluation metrics...
+              </div>
+            </div>
+          );
+        }
+
+        if (error) {
+          return (
+            <div className="analysis-container">
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "60px 20px",
+                  color: "#ff6b6b",
+                }}
+              >
+                Error: {error}
+              </div>
+            </div>
+          );
+        }
+
+        if (!metrics || Object.keys(metrics).length === 0) {
+          return (
+            <div className="analysis-container">
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "60px 20px",
+                  color: "rgba(255,255,255,0.4)",
+                }}
+              >
+                No metrics available. Make sure the model is loaded.
+              </div>
+            </div>
+          );
+        }
+
+        const mainMetrics = Object.entries(METRIC_META)
+          .filter(([key]) => metrics[key] !== undefined)
+          .map(([key, meta]) => ({
+            key,
+            value: metrics[key],
+            ...meta,
+          }));
+
+        const genrePrec = metrics.per_genre_precision || {};
+        const sortedGenres = Object.entries(genrePrec).sort(
+          (a, b) => b[1] - a[1],
+        );
+        const maxGenrePrec = sortedGenres.length > 0
+          ? Math.max(...sortedGenres.map(([, v]) => v))
+          : 1;
+
+        return (
+          <div className="analysis-container">
+            <SessionMetrics />
+            <div className="section-title">
+              Recommendation System Metrics (K=10)
+            </div>
+            <div className="metric-grid">
+              {mainMetrics.map((m) => {
+                const isPercent = m.value <= 1.0 && m.key !== "novelty";
+                const displayVal = isPercent
+                  ? (m.value * 100).toFixed(1) + "%"
+                  : m.value.toFixed(2);
+                const barWidth = isPercent
+                  ? m.value * 100
+                  : Math.min((m.value / 10) * 100, 100);
+
+                return (
+                  <div key={m.key} className="metric-card">
+                    <div className="metric-name">{m.label}</div>
+                    <div className="metric-value" style={{ color: m.color }}>
+                      {displayVal}
+                    </div>
+                    <div className="metric-bar-wrap">
+                      <div
+                        className="metric-bar"
+                        style={{
+                          width: barWidth + "%",
+                          background: m.color,
+                        }}
+                      />
+                    </div>
+                    <div className="metric-desc">{m.desc}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {sortedGenres.length > 0 && (
+              <div className="glass-card">
+                <div className="section-title">
+                  Precision@10 by Genre
+                </div>
+                <table className="genre-table">
+                  <thead>
+                    <tr>
+                      <th>Genre</th>
+                      <th style={{ width: "80px" }}>Precision</th>
+                      <th style={{ width: "40%" }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedGenres.map(([genre, prec]) => (
+                      <tr key={genre}>
+                        <td>{genre}</td>
+                        <td>{(prec * 100).toFixed(1)}%</td>
+                        <td>
+                          <div className="genre-bar-wrap">
+                            <div
+                              className="genre-bar"
+                              style={{
+                                width:
+                                  (prec / maxGenrePrec) * 100 + "%",
+                              }}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      }
 
       function App() {
+        const [activeTab, setActiveTab] = useState("main");
         const [movie, setMovie] = useState(null);
         const [loading, setLoading] = useState(true);
         const [recommendations, setRecommendations] = useState([]);
         const [stats, setStats] = useState({ liked: 0, disliked: 0 });
+        const [availableModels, setAvailableModels] = useState([]);
+        const [activeModel, setActiveModel] = useState("");
         const [exitDir, setExitDir] = useState(null);
         const [dragX, setDragX] = useState(0);
         const [feedbackId, setFeedbackId] = useState(null);
@@ -593,10 +1160,40 @@
           }
         }, []);
 
+        const fetchModels = useCallback(async () => {
+          try {
+            const res = await fetch(`${API}/api/models`);
+            const data = await res.json();
+            setAvailableModels(data.models || []);
+            setActiveModel(data.active || "");
+          } catch (e) {
+            console.error(e);
+          }
+        }, []);
+
+        const handleModelSwitch = useCallback(async (mode) => {
+          try {
+            const res = await fetch(`${API}/api/models/switch`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ mode }),
+            });
+            if (res.ok) {
+              setActiveModel(mode);
+              fetchMovie();
+              fetchRecommendations();
+              fetchStats();
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        }, [fetchMovie, fetchRecommendations, fetchStats]);
+
         useEffect(() => {
           fetchMovie();
           fetchRecommendations();
           fetchStats();
+          fetchModels();
         }, []);
 
         const handleSwipe = useCallback(
@@ -624,17 +1221,16 @@
           [movie, fetchMovie, fetchRecommendations, fetchStats],
         );
 
-        // Keyboard controls
         useEffect(() => {
           const handleKeyDown = (e) => {
+            if (activeTab !== "main") return;
             if (e.key === "ArrowLeft") handleSwipe("left");
             if (e.key === "ArrowRight") handleSwipe("right");
           };
           window.addEventListener("keydown", handleKeyDown);
           return () => window.removeEventListener("keydown", handleKeyDown);
-        }, [handleSwipe]);
+        }, [handleSwipe, activeTab]);
 
-        // Mouse drag
         const onMouseDown = (e) => {
           isDragging.current = true;
           startX.current = e.clientX;
@@ -687,9 +1283,6 @@
           [fetchStats],
         );
 
-        const likeOpacity = Math.min(Math.max(dragX / 100, 0), 1);
-        const nopeOpacity = Math.min(Math.max(-dragX / 100, 0), 1);
-
         return (
           <div className="app-container">
             <header className="header">
@@ -702,191 +1295,59 @@
                   &#x2718; {stats.disliked}
                 </span>
               </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <a className="nav-link" href="/dashboard">
-                  Analytics
-                </a>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                {availableModels.length > 0 && (
+                  <select
+                    className="model-select"
+                    value={activeModel}
+                    onChange={(e) => handleModelSwitch(e.target.value)}
+                  >
+                    {availableModels.map((m) => (
+                      <option key={m.mode} value={m.mode}>{m.label}</option>
+                    ))}
+                  </select>
+                )}
                 <button className="reset-btn" onClick={handleReset}>
                   Reset
                 </button>
               </div>
             </header>
 
-            <div className="main-content">
-              <div className="swipe-area">
-                <div className="card-container">
-                  {loading ? (
-                    <div className="loading">
-                      <div className="spinner"></div>
-                      Loading...
-                    </div>
-                  ) : movie ? (
-                    <div
-                      className={`movie-card ${exitDir === "right" ? "card-exit-right" : ""} ${exitDir === "left" ? "card-exit-left" : ""} ${!exitDir ? "card-enter" : ""} ${dragX > 50 ? "swiping-right" : ""} ${dragX < -50 ? "swiping-left" : ""}`}
-                      style={
-                        !exitDir
-                          ? {
-                              transform: `translateX(${dragX}px) rotate(${dragX * 0.05}deg)`,
-                            }
-                          : {}
-                      }
-                      onMouseDown={onMouseDown}
-                      onMouseMove={onMouseMove}
-                      onMouseUp={onMouseUp}
-                      onMouseLeave={onMouseUp}
-                    >
-                      <div
-                        className="swipe-overlay swipe-like"
-                        style={{ opacity: likeOpacity }}
-                      >
-                        LIKE
-                      </div>
-                      <div
-                        className="swipe-overlay swipe-nope"
-                        style={{ opacity: nopeOpacity }}
-                      >
-                        NOPE
-                      </div>
+            <nav className="tab-bar">
+              <button
+                className={`tab-btn${activeTab === "main" ? " active" : ""}`}
+                onClick={() => setActiveTab("main")}
+              >
+                Main
+              </button>
+              <button
+                className={`tab-btn${activeTab === "analysis" ? " active" : ""}`}
+                onClick={() => setActiveTab("analysis")}
+              >
+                Analysis
+              </button>
+            </nav>
 
-                      {movie.source && (
-                        <div
-                          className={`source-badge ${movie.source === "model" ? "model" : "random"}`}
-                        >
-                          {movie.source === "model" ? "AI Pick" : "Exploring"}
-                        </div>
-                      )}
-
-                      {movie.poster_url ? (
-                        <img
-                          className="card-poster"
-                          src={movie.poster_url}
-                          alt={movie.title}
-                          onError={(e) => {
-                            e.target.style.display = "none";
-                            e.target.nextSibling.style.display = "flex";
-                          }}
-                        />
-                      ) : null}
-                      <div
-                        className="card-no-poster"
-                        style={movie.poster_url ? { display: "none" } : {}}
-                      >
-                        &#127909;
-                      </div>
-
-                      <div className="card-overlay">
-                        <div className="card-title">{movie.title}</div>
-                        <div className="card-genres">
-                          {(movie.genres || []).slice(0, 4).map((g, i) => (
-                            <span key={i} className="genre-badge">
-                              {g}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="card-rating">
-                          <span className="rating-star">&#9733;</span>
-                          {movie.vote_average?.toFixed(1)} ({movie.vote_count}{" "}
-                          votes)
-                        </div>
-                        <div className="card-overview">{movie.overview}</div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="loading">No more movies!</div>
-                  )}
-                </div>
-
-                <div className="action-buttons">
-                  <button
-                    className="action-btn btn-dislike"
-                    onClick={() => handleSwipe("left")}
-                  >
-                    &#x2718;
-                  </button>
-                  <button
-                    className="action-btn btn-like"
-                    onClick={() => handleSwipe("right")}
-                  >
-                    &#x2764;
-                  </button>
-                </div>
-              </div>
-
-              <div className="recommendations">
-                <div className="rec-header">&#127775; Your Recommendations</div>
-                {stats.liked >= 3 ? (
-                  <div className="rec-subtitle">
-                    Based on your {stats.liked} liked movies
-                  </div>
-                ) : (
-                  <div className="rec-subtitle">
-                    Like {3 - stats.liked} more movie
-                    {3 - stats.liked !== 1 ? "s" : ""} to get personalized
-                    recommendations
-                  </div>
-                )}
-
-                {recommendations.length > 0 ? (
-                  <div className="rec-grid">
-                    {recommendations.map((rec, i) => (
-                      <div
-                        key={rec.id || i}
-                        className={`rec-card${feedbackId === rec.id && feedbackDir === "right" ? " flash-like" : ""}${feedbackId === rec.id && feedbackDir === "left" ? " flash-dislike" : ""}`}
-                      >
-                        {rec.poster_url ? (
-                          <img
-                            className="rec-poster"
-                            src={rec.poster_url}
-                            alt={rec.title}
-                            onError={(e) => {
-                              e.target.style.display = "none";
-                              e.target.nextSibling.style.display = "flex";
-                            }}
-                          />
-                        ) : null}
-                        <div
-                          className="rec-no-poster"
-                          style={rec.poster_url ? { display: "none" } : {}}
-                        >
-                          &#127909;
-                        </div>
-                        <div className="rec-overlay">
-                          <button
-                            className="rec-overlay-btn dislike"
-                            onClick={() => handleRecFeedback(rec.id, "left")}
-                            title="Dislike"
-                          >
-                            &#x2718;
-                          </button>
-                          <button
-                            className="rec-overlay-btn like"
-                            onClick={() => handleRecFeedback(rec.id, "right")}
-                            title="Like"
-                          >
-                            &#x2764;
-                          </button>
-                        </div>
-                        <div className="rec-info">
-                          <div className="rec-title">{rec.title}</div>
-                          <div className="rec-rating">
-                            &#9733; {rec.vote_average?.toFixed(1)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="no-recs">
-                    <div className="no-recs-icon">&#128253;</div>
-                    <div className="no-recs-text">
-                      {stats.liked >= 3
-                        ? "Computing recommendations..."
-                        : "Swipe right on movies you like!"}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            {activeTab === "main" ? (
+              <MainTab
+                movie={movie}
+                loading={loading}
+                recommendations={recommendations}
+                stats={stats}
+                exitDir={exitDir}
+                dragX={dragX}
+                setDragX={setDragX}
+                feedbackId={feedbackId}
+                feedbackDir={feedbackDir}
+                handleSwipe={handleSwipe}
+                handleRecFeedback={handleRecFeedback}
+                onMouseDown={onMouseDown}
+                onMouseMove={onMouseMove}
+                onMouseUp={onMouseUp}
+              />
+            ) : (
+              <AnalysisTab />
+            )}
           </div>
         );
       }

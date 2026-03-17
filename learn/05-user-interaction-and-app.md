@@ -777,59 +777,38 @@ user's profile and the movie) and `combined_score` (blended with quality).
 ### 6.2 Analytics, Operations, and Dashboard Endpoints
 
 Beyond the core swipe/recommend flow, the app exposes endpoints for analytics,
-model operations, and background task management. These power the dashboard UI
-at `/dashboard`.
+model operations. These power the main single-page UI served from `/`.
 
 #### Analytics Endpoints
 
 | Endpoint                     | Purpose                                                                                                                                                               |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/analytics`         | Session analytics: like rates by source, confusion matrix (TP/FP/FN/TN), swipe buckets, genre distribution, popularity stats, score distributions, calibration curves |
-| `GET /api/analytics/catalog` | Catalog-level: genre distribution, popularity histogram                                                                                                               |
-| `GET /api/analytics/model`   | Model stats: field weights, vocab sizes, sparsity, cosine sim distribution histogram                                                                                  |
+| `GET /api/analytics/session` | Session analytics: like rates by source, source breakdown, model lift, and hit rate                                                                                  |
 | `GET /api/analytics/offline` | Offline evaluation metrics (cached after first call): Precision@K, NDCG@K, MRR, Serendipity, Coverage, ILD, Novelty, per-genre precision                              |
 
 The session analytics endpoint computes:
 
-- **Like rates** by source (random, model, rec_list) and model lift (model rate / random rate)
-- **Confusion matrix**: TP = liked model/rec_list picks, FP = disliked model/rec_list picks, FN = liked random, TN = disliked random. Derives precision, recall, F1.
-- **Swipe buckets**: Like rate in groups of 5 swipes, showing how engagement evolves over time
-- **Calibration**: Similarity score bins with observed like rate (does higher score = higher like probability?)
+- **Like rates** by source (random, model, rec_list)
+- **Source breakdown** for swipes and likes
+- **Model lift** relative to random exploration
+- **Hit rate** for model-served picks
 
 #### Operations Endpoints
 
-These trigger heavy operations, either as background tasks (retrain, evaluate,
-gridsearch, fetch-posters, apply-weights) or synchronous quick actions
-(reload-model, reload-data). See doc 04, Section 6 for details.
+The current app runtime stays focused on serving the swipe experience and
+switching between prebuilt models.
 
 | Endpoint                             | Type       | What it does                             |
 | ------------------------------------ | ---------- | ---------------------------------------- |
-| `POST /api/operations/retrain`       | Background | Full pipeline + hot-swap model           |
-| `POST /api/operations/evaluate`      | Background | Run all evaluation metrics               |
-| `POST /api/operations/gridsearch`    | Background | 256-combo grid search (cancellable)      |
-| `POST /api/operations/fetch-posters` | Background | Scrape TMDB posters (cancellable)        |
-| `POST /api/operations/apply-weights` | Background | Refit with custom weights + hot-swap     |
-| `POST /api/operations/reload-model`  | Sync       | Load pkl from disk                       |
-| `POST /api/operations/reload-data`   | Sync       | Reload processed CSV + merge poster URLs |
-| `GET /api/model/weights`             | Sync       | Return current field weights             |
+| `GET /api/models`                    | Sync       | List loaded prebuilt models              |
+| `POST /api/models/switch`            | Sync       | Switch active model and reset session    |
+| `GET /api/analytics/offline`         | Sync       | Return offline evaluation metrics        |
+| `GET /api/analytics/session`         | Sync       | Return live swipe session metrics        |
 
-#### Task Management Endpoints
+#### The Analysis View
 
-Background operations create tasks with unique IDs. The dashboard polls these
-for progress updates.
-
-| Endpoint                      | Purpose                                  |
-| ----------------------------- | ---------------------------------------- |
-| `GET /api/tasks`              | List all tasks with status + active task |
-| `GET /api/tasks/{id}`         | Get progress of a specific task          |
-| `POST /api/tasks/{id}/cancel` | Request cancellation of a running task   |
-
-#### The Dashboard
-
-The dashboard (`/dashboard`, served from `app/static/dashboard.html`) provides
-a visual interface for model analytics, session analytics, and operations. It
-is a separate single-file HTML page (like the main swipe UI) that communicates
-with the same FastAPI backend.
+The analysis tab in `app/static/index.html` provides a visual interface for
+offline metrics and live session analytics inside the same single-page app.
 
 ---
 
@@ -840,8 +819,8 @@ This is a critical distinction that is easy to misunderstand.
 ### What Does NOT Happen
 
 The recommendation model (the TF-IDF vectors, the cosine similarity matrix) is
-**never retrained** during a user session. The model was trained once (during
-`train_model.py` or at server startup) and sits in memory as a fixed
+**never retrained** during a user session. The model was trained beforehand
+with `train_model.py` or the notebook and sits in memory as a fixed
 mathematical structure. When a user swipes, no neural network is being updated,
 no weights are being adjusted, no new patterns are being learned.
 

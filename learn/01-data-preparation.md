@@ -39,9 +39,8 @@ that a recommendation algorithm can work with.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                        RAW DATA (5 CSV files)                        │
+│                        RAW DATA (4 CSV files)                        │
 │  movies_metadata.csv  credits.csv  keywords.csv  links_small.csv     │
-│  ratings_small.csv                                                   │
 └────────────────────────────────┬─────────────────────────────────────┘
                                  │
                                  ▼
@@ -74,7 +73,7 @@ that a recommendation algorithm can work with.
 ## 2. What Raw Data We Start With
 
 The raw data comes from the **"The Movies Dataset"** on Kaggle. It is based on data from
-**TMDB** (The Movie Database) and **MovieLens**, and is split across five CSV files. Think of
+**TMDB** (The Movie Database) and **MovieLens**, and is split across four CSV files. Think of
 each file as a separate spreadsheet, each holding a different aspect of movie information.
 
 ### 2.1 movies_metadata.csv -- The Core Movie Information
@@ -154,19 +153,6 @@ recommendations.
 
 Think of it as a curated whitelist: "only use these movies."
 
-### 2.5 ratings_small.csv -- User Rating Data
-
-| Column      | What It Contains               | Example      |
-| ----------- | ------------------------------ | ------------ |
-| `userId`    | Anonymous user ID              | `1`          |
-| `movieId`   | MovieLens movie ID             | `31`         |
-| `rating`    | Rating the user gave (0.5-5.0) | `2.5`        |
-| `timestamp` | When the rating was made       | `1260759144` |
-
-**Why we need it:** While our system is _content-based_ (not collaborative filtering), the
-ratings data is loaded as part of the full pipeline. It can be used for evaluation purposes --
-to test whether movies we recommend are ones that users actually rated highly.
-
 ### How the Files Connect
 
 ```
@@ -177,10 +163,6 @@ movies_metadata.csv ◄─── id ───► credits.csv
    keywords.csv
 
 links_small.csv ─── tmdbId ───► movies_metadata.csv (filter)
-        │
-        │ movieId
-        ▼
-ratings_small.csv
 ```
 
 The `id` column is the glue. Every file uses the TMDB movie ID (`id` or `tmdbId`) to link
@@ -192,7 +174,7 @@ information about the same movie across different files.
 
 File: **`src/data/make_dataset.py`**
 
-This script takes the five raw CSV files and produces a single, clean, merged dataset. Let us
+This script takes the four raw CSV files and produces a single, clean, merged dataset. Let us
 walk through it step by step.
 
 ### 3.1 Loading the Raw Files
@@ -203,8 +185,7 @@ def load_raw_data(raw_dir='data/raw'):
     credits = pd.read_csv(raw_dir / 'credits.csv')
     keywords = pd.read_csv(raw_dir / 'keywords.csv')
     links_small = pd.read_csv(raw_dir / 'links_small.csv')
-    ratings = pd.read_csv(raw_dir / 'ratings_small.csv')
-    return metadata, credits, keywords, links_small, ratings
+    return metadata, credits, keywords, links_small
 ```
 
 Each `pd.read_csv()` call reads one CSV file into a pandas DataFrame (think of it as a

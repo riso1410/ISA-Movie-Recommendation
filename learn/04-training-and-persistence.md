@@ -108,12 +108,13 @@ The entire training process is orchestrated by `src/models/train_model.py`:
 
 ```python
 def train(raw_dir='data/raw', model_dir='models'):
-    smd = make_dataset(raw_dir)       # Step 1: Load and clean data
-    smd = build_features(smd)          # Step 2: Create text columns for vectorizers
-    recommender = build_recommender(smd)  # Step 3: Instantiate + fit recommender
-    # Step 4: Save to disk with pickle
-    with open(model_dir / 'recommender.pkl', 'wb') as f:
-        pickle.dump(recommender, f)
+    smd = make_dataset(raw_dir)
+    smd = build_features(smd)
+
+    for mode in MODES:
+        recommender = build_recommender(smd, mode=mode)
+        with open(model_dir / f'recommender_{mode}.pkl', 'wb') as f:
+            pickle.dump(recommender, f)
 ```
 
 Let's walk through each step.
@@ -122,14 +123,13 @@ Let's walk through each step.
 
 **File:** `src/data/make_dataset.py`
 
-This function loads five raw CSV files from the Kaggle "The Movies Dataset":
+This function loads four raw CSV files from the Kaggle "The Movies Dataset":
 
 ```
   movies_metadata.csv   -- titles, overviews, genres, vote counts, etc.
   credits.csv           -- cast and crew (JSON strings)
   keywords.csv          -- keyword tags (JSON strings)
   links_small.csv       -- maps MovieLens IDs to TMDB IDs (our subset filter)
-  ratings_small.csv     -- user ratings (loaded but not used for training)
 ```
 
 What it does:
@@ -370,7 +370,7 @@ Here's a diagram of the complete training data flow:
   Fully fitted recommender object
         |
         v
-  pickle.dump()  -->  models/recommender.pkl  (~150-300 MB on disk)
+  pickle.dump()  -->  models/recommender_<mode>.pkl  (~150-300 MB on disk)
 ```
 
 ---
@@ -389,7 +389,7 @@ Think of it like freezing food:
         |
         |  pickle.dump(obj, file)    <-- "freeze" the object
         v
-  Bytes on disk (recommender.pkl)
+  Bytes on disk (recommender_<mode>.pkl)
         |
         |  pickle.load(file)         <-- "thaw" the object
         v
@@ -402,7 +402,7 @@ When we call `pickle.dump(recommender, f)`, pickle traverses the entire object g
 and serializes everything reachable from the `recommender` object:
 
 ```
-  recommender.pkl contains:
+  recommender_<mode>.pkl contains:
   +------------------------------------------------------------------+
   |  ContentBasedRecommender                                         |
   |  +------------------------------------------------------------+  |
@@ -468,33 +468,34 @@ loaded from Java, JavaScript, or any other language.
 ## 4. Model Loading at App Startup
 
 When the FastAPI web application starts, the `startup()` function in `app/main.py`
-runs. It has two code paths:
+loads every available `recommender_<mode>.pkl` file from `models/` and picks one
+active model.
 
 ```
   App starts
       |
       v
-  Does models/recommender.pkl exist?
-      |                    |
-     YES                  NO
-      |                    |
-      v                    v
-  Load from pickle     Fit from scratch
-  (fast: ~2-5 sec)     (slow: ~15-20 sec)
-      |                    |
-      v                    v
-  Post-processing      Store in memory
-      |
-      v
-  Ready to serve requests
+  Find models/recommender_*.pkl
+              |
+              v
+      Load each available pickle
+              |
+              v
+      Post-process each model
+              |
+              v
+      Pick active model
+              |
+              v
+      Ready to serve requests
 ```
 
-### Path A: Loading from pickle (fast path)
+### Model loading
 
 ```python
-model_path = PROJECT_ROOT / "models" / "recommender.pkl"
-if model_path.exists():
-    with open(model_path, "rb") as f:
+for path in sorted(MODEL_DIR.glob("recommender_*.pkl")):
+    mode = path.stem.removeprefix("recommender_")
+    with open(path, "rb") as f:
         recommender = pickle.load(f)
 ```
 
@@ -540,19 +541,8 @@ Some movies may not have had their posters scraped yet. If the original metadata
 includes a `poster_path` field (a partial TMDB URL like `/abc123.jpg`), the app
 constructs the full URL as a fallback.
 
-### Path B: Fitting from scratch (fallback path)
-
-```python
-else:
-    processed = build_features(processed)
-    recommender = ContentBasedRecommender(processed)
-    recommender.fit()
-    movies_df = processed.reset_index(drop=True)
-```
-
-If no pickle file exists, the app builds features from the processed CSV and fits the
-recommender in-process. This takes ~15-20 seconds, during which the app cannot serve
-requests. This is why pre-training and pickling is preferred for production.
+If no prebuilt model files exist, startup fails fast and asks you to generate them
+before serving traffic. The app does not fit models in-process.
 
 ### Visual summary of startup data flow
 
@@ -566,26 +556,21 @@ requests. This is why pre-training and pickling is preferred for production.
             (genres, etc.)   column
                     |             |
                     v             |
-        recommender.pkl exists?  |
-           /          \          |
-         YES           NO       |
-          |             |        |
-          v             v        |
-    pickle.load()   build_features()
-          |          + fit()     |
-          v             |        |
-    Recommender obj     v        |
-          |        Recommender   |
-          v          obj         |
-    Reset index,     |           |
-    coerce types     |           |
-          |          |           |
-          v          |           |
-    Merge poster  <--+-----------+
+    recommender_*.pkl found?  |
+               |               |
+               v               |
+         pickle.load()         |
+               |               |
+               v               |
+      Recommender objects      |
+               |               |
+               v               |
+      Reset index, coerce      |
+      types, merge posters  <--+
     URLs from CSV
           |
           v
-    recommender & movies_df
+    active recommender & movies_df
     stored as globals
           |
           v
@@ -679,77 +664,51 @@ When a user asks for recommendations similar to "The Dark Knight":
 
 ---
 
-## 6. Hot-Swapping and Runtime Operations
+## 6. Runtime Model Selection
 
-### Hot-Swap: Replacing the Model Without Restarting
+### Switching the Active Prebuilt Model
 
-The application supports **hot-swapping** — replacing the live recommender model
-in memory without restarting the server. This is handled by `_hot_swap_model()`
-in `app/main.py`:
+The application keeps all discovered `recommender_<mode>.pkl` files in memory at
+startup and lets the frontend switch the active one through `POST /api/models/switch`.
 
-```python
-def _hot_swap_model(new_rec):
-    global recommender, movies_df, offline_cache
-    # Preserve poster URLs from current data
-    if movies_df is not None and "poster_url" in movies_df.columns:
-        poster_map = movies_df.drop_duplicates(subset="id").set_index("id")["poster_url"]
-        new_rec.smd["poster_url"] = new_rec.smd["id"].map(poster_map).fillna("")
-    movies_df = new_rec.smd.copy()
-    recommender = new_rec
-    offline_cache = None   # invalidate cached evaluation results
-```
+Switching models does three things:
 
-The function:
+1. Replaces the active `recommender` reference
+2. Replaces `movies_df` with the selected model's movie table
+3. Resets the current swipe session and cached offline analytics
 
-1. Carries forward poster URLs from the currently loaded data (so they are not
-   lost when swapping in a freshly trained model that does not have them)
-2. Falls back to `poster_path` for movies still missing `poster_url`
-3. Replaces the global `recommender` and `movies_df` references atomically
-4. Invalidates the offline evaluation cache (since the model changed)
+### Runtime Operations via API
 
-### Background Operations via API
-
-The web app exposes several heavy operations as **background tasks** that run in
-daemon threads. Each operation uses a task management system (`_tasks` dict with
-thread-safe locking) that tracks progress and supports cancellation.
+The web app keeps runtime operations intentionally small and limited to serving
+analytics plus switching between prebuilt models.
 
 | Endpoint                             | What it does                                                             |
 | ------------------------------------ | ------------------------------------------------------------------------ |
-| `POST /api/operations/retrain`       | Full pipeline: make_dataset + build_features + fit + save pkl + hot-swap |
-| `POST /api/operations/evaluate`      | Run all evaluation metrics on 100 sampled test movies                    |
-| `POST /api/operations/gridsearch`    | Grid search over 256 weight combinations (cancellable)                   |
-| `POST /api/operations/fetch-posters` | Scrape TMDB poster URLs (cancellable, rate-limited)                      |
-| `POST /api/operations/apply-weights` | Refit model with custom weights + save + hot-swap                        |
-| `POST /api/operations/reload-model`  | Load `recommender.pkl` from disk + hot-swap (synchronous)                |
-| `POST /api/operations/reload-data`   | Reload `movies_processed.csv` and merge poster URLs (sync)               |
+| `GET /api/models`                    | List prebuilt models currently loaded into memory                        |
+| `POST /api/models/switch`            | Switch the active in-memory model and reset the current session          |
+| `GET /api/analytics/offline`         | Run offline evaluation metrics against the active loaded model           |
+| `GET /api/analytics/session`         | Return live session metrics from swipe behavior                          |
 
-Background tasks expose their state via:
-
-- `GET /api/tasks` — list all tasks with status
-- `GET /api/tasks/{id}` — get progress of a specific task
-- `POST /api/tasks/{id}/cancel` — request cancellation of a running task
-
-The retrain workflow:
+Model generation happens outside the app process. The runtime workflow is:
 
 ```
-POST /api/operations/retrain
+Notebook / training script
         |
         v
-  Background thread:
-    1. make_dataset()          → load + clean raw CSVs
-    2. build_features()        → create text columns
-    3. build_recommender()     → fit TF-IDF + cosine sim
-    4. pickle.dump()           → save to models/recommender.pkl
-    5. _hot_swap_model()       → replace live model
+  1. make_dataset()
+  2. build_features()
+  3. build_recommender(mode)
+  4. pickle.dump() -> models/recommender_<mode>.pkl
         |
         v
-  New model is live (session state preserved)
+App startup or `POST /api/models/switch`
+loads the saved files into memory
 ```
 
 ### Model Introspection
 
 The `get_model_stats()` method on `ContentBasedRecommender` returns training
-metadata for analytics:
+metadata that can be useful during analysis:
 
 ```python
 stats = recommender.get_model_stats()
@@ -760,8 +719,8 @@ stats = recommender.get_model_stats()
 #          data_quality (empty_count, fill_rate per field)
 ```
 
-This is exposed via `GET /api/analytics/model` and powers the dashboard's model
-stats panel.
+The current FastAPI app does not expose a dedicated `GET /api/analytics/model`
+endpoint.
 
 ---
 
@@ -835,7 +794,7 @@ not in the model itself.
                 similarity matrix, vectorizers, indices) to a single .pkl file.
 
   LOADING:      pickle.load() restores the object. Post-processing merges
-                poster URLs and coerces data types. Fallback: fit from scratch.
+                poster URLs and coerces data types. Missing files stop startup.
 
   CORE IDEA:    Movies are vectors of text features. Similar vectors = similar
                 movies. The N x N similarity matrix is precomputed so that

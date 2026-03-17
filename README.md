@@ -21,7 +21,6 @@ Download [The Movies Dataset](https://www.kaggle.com/datasets/rounakbanik/the-mo
 - `credits.csv`
 - `keywords.csv`
 - `links_small.csv`
-- `ratings_small.csv`
 
 ### 3. Run the Jupyter notebook
 
@@ -31,7 +30,17 @@ uv run jupyter notebook notebooks/01_eda_and_preprocessing.ipynb
 
 This notebook contains the full pipeline: EDA, preprocessing, iterative modeling (3 iterations), and evaluation.
 
-### 4. Run the MovieMatch web app
+### 4. Generate recommender models
+
+Train and save one pickle per mode into `models/`:
+
+```bash
+uv run python -m src.models.train_model
+```
+
+This writes files like `models/recommender_overview.pkl`, `models/recommender_soup.pkl`, and `models/recommender_multi.pkl`.
+
+### 5. Run the MovieMatch web app
 
 Start the FastAPI backend (which also serves the React frontend):
 
@@ -41,7 +50,7 @@ uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 Open **http://localhost:8000** in your browser.
 
-The app loads the recommender model at startup (~15 seconds), then you can:
+The app only loads prebuilt models from `models/` at startup and lets you switch between them from the UI. It does not train models at runtime. Once it starts, you can:
 - Swipe right (like) or left (dislike) on movie cards
 - Use arrow keys or the buttons to swipe
 - Drag cards with your mouse
@@ -58,10 +67,9 @@ The app loads the recommender model at startup (~15 seconds), then you can:
     │   ├── processed          <- Cleaned and merged movie data
     │   └── raw                <- Original CSVs from Kaggle
     │
-    ├── docs
-    │   └── plans              <- Design and implementation documents
+    ├── docs                   <- Project and operational documentation
     │
-    ├── models                 <- Trained models (pickle files)
+    ├── models                 <- Prebuilt recommender pickle files
     │
     ├── notebooks
     │   └── 01_eda_and_preprocessing.ipynb  <- Full EDA + modeling + evaluation
