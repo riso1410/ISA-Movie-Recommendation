@@ -11,7 +11,7 @@ Content-based movie recommendation system (ISA course Mini-project). Per-field T
 ```bash
 uv sync                                        # Install dependencies
 uv run uvicorn app.main:app --reload           # Run web app (http://localhost:8000)
-uv run python -m src.models.train_model        # Train recommender → models/recommender.pkl
+uv run python -m src.models.train_model        # Train recommender → models/recommender_<mode>.pkl
 uv run python -m src.models.evaluate_model     # Evaluate: Precision@K, NDCG@K, Coverage, Diversity, Novelty
 uv run python -m src.data.fetch_posters        # Scrape TMDB poster URLs (slow, rate-limited)
 uv run jupyter notebook                        # Run Jupyter notebooks
@@ -21,7 +21,7 @@ No tests exist. No Docker setup. No linter configured.
 
 ## Data
 
-Raw data: manually download from Kaggle ("The Movies Dataset") into `data/raw/`. Five CSVs: `movies_metadata.csv`, `credits.csv`, `keywords.csv`, `links_small.csv`, `ratings_small.csv`. Processed output: `data/processed/movies_processed.csv`. The `data/` directory is gitignored.
+Raw data: manually download from Kaggle ("The Movies Dataset") into `data/raw/`. Required CSVs: `movies_metadata.csv`, `credits.csv`, `keywords.csv`, `links_small.csv`. Processed output: `data/processed/movies_processed.csv`. The `data/` directory is gitignored.
 
 ## Architecture
 
@@ -46,7 +46,7 @@ src/models/evaluate_model.py   → Precision@K, NDCG@K, Coverage, Intra-List Div
 
 ### Web App: `app/`
 
-- `app/main.py` — FastAPI backend. Loads pickled recommender (or fits from scratch) at startup. Single-process in-memory session state (liked/disliked/seen) — no multi-user support.
+- `app/main.py` — FastAPI backend. Loads prebuilt pickled recommenders at startup and can switch between loaded models. Single-process in-memory session state (liked/disliked/seen) — no multi-user support.
 - `app/static/index.html` — React 18 via CDN (no build step). Single-file SPA with Babel JSX transform.
 
 **Movie selection**: Random (popularity-weighted) until 3+ likes, then content-based recs aggregated from all liked movies.
@@ -59,7 +59,6 @@ src/models/evaluate_model.py   → Precision@K, NDCG@K, Coverage, Intra-List Div
 
 ### Design Docs
 
-`docs/plans/` — Design doc and implementation plan with 3-iteration approach.
 `docs/evaluation_report.md` — Evaluation results and analysis.
 `learn/` — Educational markdown docs (00-06) explaining each system component.
 `reports/figures/` — Generated evaluation/EDA visualizations (PNGs).
