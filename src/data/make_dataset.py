@@ -9,6 +9,9 @@ from ast import literal_eval
 from pathlib import Path
 
 
+TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
+
+
 def load_raw_data(raw_dir="data/raw"):
     """Load all raw CSV files."""
     raw_dir = Path(raw_dir)
@@ -88,6 +91,18 @@ def parse_collection(collection_str: str) -> str:
     return ""
 
 
+def build_poster_url(poster_path: str) -> str:
+    """Convert TMDB poster_path to a full image URL."""
+    if pd.isna(poster_path):
+        return ""
+
+    poster_path = str(poster_path).strip()
+    if not poster_path or poster_path.lower() == "nan":
+        return ""
+
+    return f"{TMDB_IMAGE_BASE_URL}{poster_path}"
+
+
 def merge_datasets(smd, credits_parsed, keywords_parsed):
     """Merge metadata with parsed credits and keywords."""
     smd["genres"] = (
@@ -125,6 +140,11 @@ def make_dataset(raw_dir="data/raw", processed_dir="data/processed"):
     credits_parsed = parse_credits(credits)
     keywords_parsed = parse_keywords(keywords)
     smd = merge_datasets(smd, credits_parsed, keywords_parsed)
+    smd["poster_url"] = (
+        smd["poster_path"].apply(build_poster_url)
+        if "poster_path" in smd.columns
+        else ""
+    )
 
     processed_dir = Path(processed_dir)
     processed_dir.mkdir(parents=True, exist_ok=True)
@@ -146,16 +166,7 @@ def make_dataset(raw_dir="data/raw", processed_dir="data/processed"):
         "poster_url",
     ]
 
-    smd["poster_url"] = ""
     out_path = processed_dir / "movies_processed.csv"
-    if out_path.exists():
-        existing = pd.read_csv(out_path)
-        if "poster_url" in existing.columns:
-            poster_map = existing.drop_duplicates(subset="id").set_index("id")[
-                "poster_url"
-            ]
-            smd["poster_url"] = smd["id"].map(poster_map).fillna("")
-
     smd[cols].to_csv(out_path, index=False)
     print(f"Saved {len(smd)} movies to {processed_dir / 'movies_processed.csv'}")
     return smd

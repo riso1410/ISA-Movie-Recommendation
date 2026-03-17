@@ -19,7 +19,7 @@ The pipeline (`make_dataset.py`) does:
 - Cleans bad IDs, filters to the "small" movie subset
 - Parses JSON columns: extracts genre names, keyword names, top 5 cast members, director name
 - Derives extra fields: **decade** (e.g. `decade_1990s`), **language** (e.g. `lang_en`), **collection** (e.g. franchise name)
-- Outputs `movies_processed.csv`
+- Outputs `movies_processed.csv`, including `poster_url` derived from TMDB `poster_path`
 
 ---
 

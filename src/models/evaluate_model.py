@@ -1,13 +1,12 @@
 """
 Comprehensive evaluation metrics for content-based recommender.
-Precision@K, NDCG@K, Coverage, Intra-List Diversity, Novelty, and grid search.
+Precision@K, NDCG@K, MAP@K, MRR, Coverage, Intra-List Diversity, Novelty, and grid search.
 """
 
 import numpy as np
 import pandas as pd
 from itertools import product
 from sklearn.metrics import ndcg_score
-from sklearn.metrics.pairwise import cosine_similarity
 
 from src.data.make_dataset import make_dataset
 from src.features.build_features import build_features
@@ -20,7 +19,7 @@ def _genre_overlap(genres_a: list, genres_b: list) -> int:
 
 
 def precision_at_k(
-    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 10
+    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 5
 ) -> float:
     """Genre-overlap-based Precision@K averaged over test movies."""
     precisions = []
@@ -49,7 +48,7 @@ def precision_at_k(
 
 
 def ndcg_at_k(
-    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 10
+    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 5
 ) -> float:
     """NDCG@K using genre overlap count as relevance score."""
     ndcg_scores = []
@@ -88,7 +87,7 @@ def coverage(
     recommender: ContentBasedRecommender,
     test_movies: pd.DataFrame,
     catalog_size: int,
-    k: int = 10,
+    k: int = 5,
 ) -> float:
     """Fraction of catalog appearing in any recommendation list."""
     all_rec_titles = set()
@@ -102,7 +101,7 @@ def coverage(
 
 
 def intra_list_diversity(
-    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 10
+    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 5
 ) -> float:
     """Average (1 - mean pairwise cosine similarity) within recommendation lists."""
     cosine_sim = recommender.cosine_sim
@@ -139,7 +138,7 @@ def novelty(
     recommender: ContentBasedRecommender,
     test_movies: pd.DataFrame,
     popularity_scores: pd.Series,
-    k: int = 10,
+    k: int = 5,
 ) -> float:
     """Average inverse popularity (self-information) of recommended items."""
     pop_max = popularity_scores.max()
@@ -164,23 +163,12 @@ def novelty(
     return float(np.mean(novelty_scores)) if novelty_scores else 0.0
 
 
-def serendipity_at_k(
-    recommender: ContentBasedRecommender,
-    test_movies: pd.DataFrame,
-    popularity_scores: pd.Series,
-    k: int = 10,
+def mean_average_precision(
+    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 5
 ) -> float:
-    """Serendipity@K = mean(unexpectedness * relevance).
-    unexpectedness = 1 - normalized_popularity, relevance = genre_overlap > 0."""
-    pop_max = popularity_scores.max()
-    if pop_max == 0:
-        return 0.0
+    """MAP@K: Mean Average Precision. Considers the rank position of each relevant item."""
+    ap_scores = []
 
-    pop_norm = popularity_scores / pop_max
-    pop_by_title = pd.Series(pop_norm.values, index=recommender.smd["title"])
-    pop_by_title = pop_by_title[~pop_by_title.index.duplicated(keep="first")]
-
-    scores = []
     for _, row in test_movies.iterrows():
         title = row["title"]
         true_genres = row["genres"] if isinstance(row["genres"], list) else []
@@ -191,20 +179,24 @@ def serendipity_at_k(
         if recs.empty:
             continue
 
-        for _, rec_row in recs.iterrows():
+        hits = 0
+        sum_precisions = 0.0
+        for rank, (_, rec_row) in enumerate(recs.iterrows(), 1):
             rec_genres = (
                 rec_row["genres"] if isinstance(rec_row["genres"], list) else []
             )
-            relevance = 1.0 if _genre_overlap(true_genres, rec_genres) > 0 else 0.0
-            p = float(pop_by_title.get(rec_row["title"], 0.5))
-            unexpectedness = 1.0 - p
-            scores.append(unexpectedness * relevance)
+            if _genre_overlap(true_genres, rec_genres) > 0:
+                hits += 1
+                sum_precisions += hits / rank
 
-    return float(np.mean(scores)) if scores else 0.0
+        ap = sum_precisions / min(k, hits) if hits > 0 else 0.0
+        ap_scores.append(ap)
+
+    return float(np.mean(ap_scores)) if ap_scores else 0.0
 
 
 def mean_reciprocal_rank(
-    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 10
+    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 5
 ) -> float:
     """MRR = mean(1/rank_of_first_relevant_item). Relevance = genre_overlap > 0."""
     rr_scores = []
@@ -233,7 +225,7 @@ def mean_reciprocal_rank(
 
 
 def per_genre_precision(
-    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 10
+    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 5
 ) -> dict[str, float]:
     """Precision@K broken down by genre. Only genres with 3+ test movies."""
     genre_results: dict[str, list[float]] = {}
@@ -266,7 +258,7 @@ def per_genre_precision(
 
 
 def evaluate_all(
-    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 10
+    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 5
 ) -> dict[str, float]:
     """Run all evaluation metrics and return results dict."""
     catalog_size = len(recommender.smd)
@@ -277,11 +269,7 @@ def evaluate_all(
     results = {
         "precision_at_k": precision_at_k(recommender, test_movies, k),
         "ndcg_at_k": ndcg_at_k(recommender, test_movies, k),
-        "coverage": coverage(recommender, test_movies, catalog_size, k),
-        "intra_list_diversity": intra_list_diversity(recommender, test_movies, k),
-        "novelty": novelty(recommender, test_movies, pop_scores, k),
-        "serendipity_at_k": serendipity_at_k(recommender, test_movies, pop_scores, k),
-        "mrr": mean_reciprocal_rank(recommender, test_movies, k),
+        "map_at_k": mean_average_precision(recommender, test_movies, k),
         "per_genre_precision": per_genre_precision(recommender, test_movies, k),
     }
     return results
@@ -291,7 +279,7 @@ def grid_search_weights(
     df: pd.DataFrame,
     test_movies: pd.DataFrame,
     weight_ranges: dict[str, list[float]] | None = None,
-    k: int = 10,
+    k: int = 5,
 ) -> dict:
     """
     Grid search over field weights to optimize Precision@K + NDCG@K.
@@ -375,7 +363,12 @@ if __name__ == "__main__":
         n=min(100, len(smd)), random_state=42
     )
 
-    print("\n=== Evaluation Results ===")
-    results = evaluate_all(rec, test, k=10)
+    print("\n=== Evaluation Results (K=5) ===")
+    results = evaluate_all(rec, test, k=5)
     for metric, value in results.items():
-        print(f"  {metric}: {value:.4f}")
+        if isinstance(value, dict):
+            print(f"  {metric}:")
+            for g, v in sorted(value.items(), key=lambda x: x[1], reverse=True):
+                print(f"    {g}: {v:.4f}")
+        else:
+            print(f"  {metric}: {value:.4f}")

@@ -78,6 +78,10 @@ target/
 # exclude data from source control by default
 /data/
 
+.venv/
+.claude/
+.ruff_cache/
+
 # Mac OS-specific storage files
 .DS_Store
 
@@ -90,3 +94,4 @@ target/
 
 # Pickle model files
 *.pkl
+*.csv

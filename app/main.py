@@ -78,13 +78,6 @@ def _prepare_model(rec: ContentBasedRecommender, processed: pd.DataFrame) -> Non
     csv_poster = processed.drop_duplicates(subset="id").set_index("id")["poster_url"]
     rec.smd["poster_url"] = rec.smd["id"].map(csv_poster).fillna("")
 
-    if "poster_path" in rec.smd.columns:
-        missing = rec.smd["poster_url"] == ""
-        paths = rec.smd.loc[missing, "poster_path"].fillna("")
-        rec.smd.loc[missing, "poster_url"] = paths.apply(
-            lambda p: f"https://image.tmdb.org/t/p/w500{p}" if p else ""
-        )
-
 
 def _load_processed_movies() -> pd.DataFrame:
     processed = pd.read_csv(
@@ -600,7 +593,7 @@ def get_offline_analytics():
         n=min(100, len(smd)), random_state=42
     )
 
-    results = evaluate_all(recommender, test, k=10)
+    results = evaluate_all(recommender, test, k=5)
     serialized = {}
     for k, v in results.items():
         if isinstance(v, dict):

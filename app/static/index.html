@@ -851,38 +851,18 @@
 
       const METRIC_META = {
         precision_at_k: {
-          label: "Precision@10",
-          desc: "Fraction of recommended movies sharing at least one genre with the query movie",
+          label: "Precision@5",
+          desc: "Fraction of top-5 recommendations sharing at least one genre with the query movie",
           color: "#51cf66",
         },
         ndcg_at_k: {
-          label: "NDCG@10",
-          desc: "Normalized Discounted Cumulative Gain measuring ranking quality by genre overlap",
+          label: "NDCG@5",
+          desc: "Normalized Discounted Cumulative Gain — ranking quality weighted by genre overlap relevance",
           color: "#74c0fc",
         },
-        mrr: {
-          label: "MRR",
-          desc: "Mean Reciprocal Rank - average 1/position of the first relevant recommendation",
-          color: "#ffd43b",
-        },
-        coverage: {
-          label: "Coverage",
-          desc: "Fraction of the full catalog that appears in at least one recommendation list",
-          color: "#da77f2",
-        },
-        intra_list_diversity: {
-          label: "Diversity",
-          desc: "1 - mean pairwise cosine similarity within recommendation lists (higher = more diverse)",
-          color: "#ff922b",
-        },
-        novelty: {
-          label: "Novelty",
-          desc: "Average inverse popularity (-log2) of recommended items (higher = less mainstream)",
-          color: "#20c997",
-        },
-        serendipity_at_k: {
-          label: "Serendipity@10",
-          desc: "Unexpectedness x relevance - how surprising yet relevant recommendations are",
+        map_at_k: {
+          label: "MAP@5",
+          desc: "Mean Average Precision — considers the rank position of each relevant item, not just count",
           color: "#f06595",
         },
       };
@@ -1036,7 +1016,7 @@
           <div className="analysis-container">
             <SessionMetrics />
             <div className="section-title">
-              Recommendation System Metrics (K=10)
+              Recommendation System Metrics (K=5)
             </div>
             <div className="metric-grid">
               {mainMetrics.map((m) => {
@@ -1072,7 +1052,7 @@
             {sortedGenres.length > 0 && (
               <div className="glass-card">
                 <div className="section-title">
-                  Precision@10 by Genre
+                  Precision@5 by Genre
                 </div>
                 <table className="genre-table">
                   <thead>

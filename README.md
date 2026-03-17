@@ -25,10 +25,10 @@ Download [The Movies Dataset](https://www.kaggle.com/datasets/rounakbanik/the-mo
 ### 3. Run the Jupyter notebook
 
 ```bash
-uv run jupyter notebook notebooks/01_eda_and_preprocessing.ipynb
+uv run jupyter notebook notebooks/experiments.ipynb
 ```
 
-This notebook contains the full pipeline: EDA, preprocessing, iterative modeling (3 iterations), and evaluation.
+This notebook contains the full pipeline: EDA, preprocessing, iterative modeling (3 iterations), evaluation, and direct `poster_url` generation in `movies_processed.csv`.
 
 ### 4. Generate recommender models
 
@@ -72,7 +72,7 @@ The app only loads prebuilt models from `models/` at startup and lets you switch
     ├── models                 <- Prebuilt recommender pickle files
     │
     ├── notebooks
-    │   └── 01_eda_and_preprocessing.ipynb  <- Full EDA + modeling + evaluation
+    │   └── experiments.ipynb  <- Full EDA + modeling + evaluation
     │
     ├── reports
     │   └── figures            <- Generated visualizations (8 PNG files)

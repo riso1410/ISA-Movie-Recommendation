@@ -13,7 +13,6 @@ uv sync                                        # Install dependencies
 uv run uvicorn app.main:app --reload           # Run web app (http://localhost:8000)
 uv run python -m src.models.train_model        # Train recommender → models/recommender_<mode>.pkl
 uv run python -m src.models.evaluate_model     # Evaluate: Precision@K, NDCG@K, Coverage, Diversity, Novelty
-uv run python -m src.data.fetch_posters        # Scrape TMDB poster URLs (slow, rate-limited)
 uv run jupyter notebook                        # Run Jupyter notebooks
 ```
 
@@ -29,11 +28,10 @@ Raw data: manually download from Kaggle ("The Movies Dataset") into `data/raw/`.
 
 ```
 src/data/make_dataset.py       → Load 5 CSVs, parse JSON columns, clean IDs, merge on movie ID
-src/data/fetch_posters.py      → Scrape TMDB poster URLs with rate-limit backoff, cache to poster_cache.csv
 src/features/build_features.py → Per-field text cleaning: overview_clean, genres_str, keywords_str, cast_str, director_str, decade, language, collection
 src/models/predict_model.py    → ContentBasedRecommender: per-field vectorizers → weighted sparse concat → cosine sim → MMR reranking
 src/models/train_model.py      → Orchestrates: make_dataset → build_features → fit recommender → pickle
-src/models/evaluate_model.py   → Precision@K, NDCG@K, Coverage, Intra-List Diversity, Novelty, grid search over weights
+src/models/evaluate_model.py   → Precision@5, NDCG@5, MAP@5, Per-Genre Precision, grid search over weights
 ```
 
 **Multi-vectorizer approach** (not single "soup"): Each field gets its own TF-IDF or Count vectorizer, weighted separately, then horizontally stacked into one sparse feature matrix. Field weights defined in `DEFAULT_WEIGHTS` dict in `predict_model.py`.
@@ -55,7 +53,7 @@ src/models/evaluate_model.py   → Precision@K, NDCG@K, Coverage, Intra-List Div
 
 ### Notebook
 
-`notebooks/01_eda_and_preprocessing.ipynb` — Full EDA, preprocessing, 3-iteration modeling, evaluation with Precision@K.
+`notebooks/experiments.ipynb` — Full EDA, preprocessing, 3-iteration modeling, evaluation with Precision@K, and `poster_url` export.
 
 ### Design Docs
 
