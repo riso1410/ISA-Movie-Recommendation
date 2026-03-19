@@ -1,7 +1,3 @@
-"""
-Data loading and cleaning pipeline.
-Loads raw CSVs, cleans IDs, merges datasets, and saves processed data.
-"""
 import pandas as pd
 import numpy as np
 from ast import literal_eval
@@ -114,7 +110,6 @@ def merge_datasets(smd, credits_parsed, keywords_parsed):
 
 
 def make_dataset(raw_dir='data/raw', processed_dir='data/processed'):
-    """Full pipeline: load, clean, parse, merge, save."""
     metadata, credits, keywords, links_small, ratings = load_raw_data(raw_dir)
     smd = clean_metadata(metadata, links_small)
     credits_parsed = parse_credits(credits)
