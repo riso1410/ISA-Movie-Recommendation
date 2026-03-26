@@ -12,6 +12,7 @@ import pandas as pd
 from scipy.sparse import hstack
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import normalize
 
 MODES = ("overview", "soup", "multi")
 
@@ -134,6 +135,7 @@ class ContentBasedRecommender:
             except ValueError:
                 continue
 
+            matrix = normalize(matrix, norm="l2", axis=1)
             if weight != 1.0:
                 matrix = matrix * weight
 
@@ -224,6 +226,48 @@ class ContentBasedRecommender:
             remaining.remove(best_local)
 
         return [(candidate_indices[i], s) for i, s in zip(selected, selected_scores)]
+
+    def recommend_from_profile(
+        self,
+        profile_indices: list[int],
+        n: int = 10,
+        alpha: float = 0.7,
+        mmr_lambda: float = 0.5,
+        exclude_indices: set[int] | None = None,
+    ) -> tuple[list[int], list[float]]:
+        """Recommend from a set of liked movie indices (for evaluation).
+
+        Builds mean feature vector from profile_indices, scores all movies
+        via cosine similarity + alpha blend with weighted rating, applies MMR.
+
+        Returns (recommended_indices, combined_scores).
+        """
+        if self.feature_matrix is None:
+            raise RuntimeError("Recommender must be fitted before calling recommend_from_profile()")
+
+        profile = self.feature_matrix[profile_indices].mean(axis=0)
+        if hasattr(profile, "A"):
+            profile = profile.A
+
+        scores = cosine_similarity(profile.reshape(1, -1), self.feature_matrix).flatten()
+
+        for idx in profile_indices:
+            scores[idx] = -np.inf
+        if exclude_indices:
+            for idx in exclude_indices:
+                scores[idx] = -np.inf
+
+        wr_norms = self.smd["wr_norm"].values
+        combined = alpha * scores + (1 - alpha) * wr_norms
+
+        n_candidates = n * 5
+        valid_mask = combined > -np.inf
+        candidate_pool = np.where(valid_mask)[0]
+        top_candidates = candidate_pool[np.argsort(combined[candidate_pool])[::-1][:n_candidates]]
+
+        candidate_scores = combined[top_candidates]
+        selected = self._mmr_rerank(top_candidates, candidate_scores, n, mmr_lambda)
+        return [s[0] for s in selected], [s[1] for s in selected]
 
     def get_model_stats(self) -> dict:
         """Return model training metadata for analytics."""

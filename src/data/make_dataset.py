@@ -172,5 +172,22 @@ def make_dataset(raw_dir="data/raw", processed_dir="data/processed"):
     return smd
 
 
+def load_ratings(raw_dir: str = "data/raw") -> pd.DataFrame:
+    """Load MovieLens ratings mapped to TMDB IDs.
+
+    Joins ratings_small.csv with links_small.csv to get tmdbId for each rating.
+    Returns DataFrame with columns: userId, tmdbId, rating.
+    """
+    raw_dir = Path(raw_dir)
+    ratings = pd.read_csv(raw_dir / "ratings_small.csv")
+    links = pd.read_csv(raw_dir / "links_small.csv")
+
+    links = links[links["tmdbId"].notna()].copy()
+    links["tmdbId"] = links["tmdbId"].astype(int)
+
+    merged = ratings.merge(links[["movieId", "tmdbId"]], on="movieId", how="inner")
+    return merged[["userId", "tmdbId", "rating"]]
+
+
 if __name__ == "__main__":
     make_dataset()
