@@ -140,11 +140,19 @@ def make_dataset(raw_dir="data/raw", processed_dir="data/processed"):
     credits_parsed = parse_credits(credits)
     keywords_parsed = parse_keywords(keywords)
     smd = merge_datasets(smd, credits_parsed, keywords_parsed)
-    smd["poster_url"] = (
-        smd["poster_path"].apply(build_poster_url)
-        if "poster_path" in smd.columns
-        else ""
-    )
+
+    # Use fetched poster URLs from cache if available, else build from raw poster_path
+    poster_cache = Path(processed_dir) / "poster_cache.csv"
+    if poster_cache.exists():
+        cache_df = pd.read_csv(poster_cache)
+        cache_df = cache_df[cache_df["poster_url"].notna() & (cache_df["poster_url"] != "")]
+        poster_map = dict(zip(cache_df["id"].astype(int), cache_df["poster_url"]))
+        smd["poster_url"] = smd["id"].astype(int).map(poster_map).fillna("")
+        print(f"Loaded {len(poster_map)} poster URLs from cache")
+    elif "poster_path" in smd.columns:
+        smd["poster_url"] = smd["poster_path"].apply(build_poster_url)
+    else:
+        smd["poster_url"] = ""
 
     processed_dir = Path(processed_dir)
     processed_dir.mkdir(parents=True, exist_ok=True)
