@@ -2,33 +2,34 @@
 Data loading and cleaning pipeline.
 Loads raw CSVs, cleans IDs, merges datasets, and saves processed data.
 """
+
 import pandas as pd
 import numpy as np
 from ast import literal_eval
 from pathlib import Path
 
 
-def load_raw_data(raw_dir='data/raw'):
+TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
+
+
+def load_raw_data(raw_dir="data/raw"):
     """Load all raw CSV files."""
     raw_dir = Path(raw_dir)
-    metadata = pd.read_csv(raw_dir / 'movies_metadata.csv', low_memory=False)
-    credits = pd.read_csv(raw_dir / 'credits.csv')
-    keywords = pd.read_csv(raw_dir / 'keywords.csv')
-    links_small = pd.read_csv(raw_dir / 'links_small.csv')
-    ratings = pd.read_csv(raw_dir / 'ratings_small.csv')
-    return metadata, credits, keywords, links_small, ratings
+    metadata = pd.read_csv(raw_dir / "movies_metadata.csv", low_memory=False)
+    credits = pd.read_csv(raw_dir / "credits.csv")
+    keywords = pd.read_csv(raw_dir / "keywords.csv")
+    links_small = pd.read_csv(raw_dir / "links_small.csv")
+    return metadata, credits, keywords, links_small
 
 
 def clean_metadata(metadata, links_small):
     """Clean metadata: fix IDs, filter to small subset."""
-    # Remove rows with non-numeric IDs
-    metadata = metadata[metadata['id'].apply(lambda x: str(x).isdigit())].copy()
-    metadata['id'] = metadata['id'].astype(int)
+    metadata = metadata[metadata["id"].apply(lambda x: str(x).isdigit())].copy()
+    metadata["id"] = metadata["id"].astype(int)
 
-    # Filter to movies in links_small
-    links_small = links_small[links_small['tmdbId'].notna()].copy()
-    links_small['tmdbId'] = links_small['tmdbId'].astype(int)
-    smd = metadata[metadata['id'].isin(links_small['tmdbId'])].copy()
+    links_small = links_small[links_small["tmdbId"].notna()].copy()
+    links_small["tmdbId"] = links_small["tmdbId"].astype(int)
+    smd = metadata[metadata["id"].isin(links_small["tmdbId"])].copy()
 
     return smd
 
@@ -36,26 +37,28 @@ def clean_metadata(metadata, links_small):
 def parse_credits(credits_df):
     """Parse cast (top 5) and director from credits."""
     cred = credits_df.copy()
-    cred['id'] = cred['id'].astype(int)
-    cred['cast'] = cred['cast'].apply(
-        lambda x: [d['name'] for d in literal_eval(x)][:5] if isinstance(x, str) else []
+    cred["id"] = cred["id"].astype(int)
+    cred["cast"] = cred["cast"].apply(
+        lambda x: [d["name"] for d in literal_eval(x)][:5] if isinstance(x, str) else []
     )
-    cred['director'] = cred['crew'].apply(
+    cred["director"] = cred["crew"].apply(
         lambda x: next(
-            (d['name'] for d in literal_eval(x) if d['job'] == 'Director'), np.nan
-        ) if isinstance(x, str) else np.nan
+            (d["name"] for d in literal_eval(x) if d["job"] == "Director"), np.nan
+        )
+        if isinstance(x, str)
+        else np.nan
     )
-    return cred[['id', 'cast', 'director']]
+    return cred[["id", "cast", "director"]]
 
 
 def parse_keywords(keywords_df):
     """Parse keyword names from keywords."""
     kw = keywords_df.copy()
-    kw['id'] = kw['id'].astype(int)
-    kw['keywords'] = kw['keywords'].apply(
-        lambda x: [d['name'] for d in literal_eval(x)] if isinstance(x, str) else []
+    kw["id"] = kw["id"].astype(int)
+    kw["keywords"] = kw["keywords"].apply(
+        lambda x: [d["name"] for d in literal_eval(x)] if isinstance(x, str) else []
     )
-    return kw[['id', 'keywords']]
+    return kw[["id", "keywords"]]
 
 
 def parse_decade(date_str: str) -> str:
@@ -63,83 +66,136 @@ def parse_decade(date_str: str) -> str:
     try:
         year = int(str(date_str)[:4])
         decade = (year // 10) * 10
-        return f'decade_{decade}s'
+        return f"decade_{decade}s"
     except (ValueError, TypeError):
-        return ''
+        return ""
 
 
 def parse_language(lang: str) -> str:
     """Convert language code to token, e.g. 'lang_en'."""
     if pd.isna(lang) or not str(lang).strip():
-        return ''
-    return f'lang_{str(lang).strip().lower()}'
+        return ""
+    return f"lang_{str(lang).strip().lower()}"
 
 
 def parse_collection(collection_str: str) -> str:
     """Extract collection name from belongs_to_collection JSON string."""
     if pd.isna(collection_str) or not str(collection_str).strip():
-        return ''
+        return ""
     try:
         col = literal_eval(str(collection_str))
-        if isinstance(col, dict) and 'name' in col:
-            return col['name']
+        if isinstance(col, dict) and "name" in col:
+            return col["name"]
     except (ValueError, SyntaxError):
         pass
-    return ''
+    return ""
+
+
+def build_poster_url(poster_path: str) -> str:
+    """Convert TMDB poster_path to a full image URL."""
+    if pd.isna(poster_path):
+        return ""
+
+    poster_path = str(poster_path).strip()
+    if not poster_path or poster_path.lower() == "nan":
+        return ""
+
+    return f"{TMDB_IMAGE_BASE_URL}{poster_path}"
 
 
 def merge_datasets(smd, credits_parsed, keywords_parsed):
     """Merge metadata with parsed credits and keywords."""
-    smd['genres'] = smd['genres'].fillna('[]').apply(literal_eval).apply(
-        lambda x: [d['name'] for d in x] if isinstance(x, list) else []
+    smd["genres"] = (
+        smd["genres"]
+        .fillna("[]")
+        .apply(literal_eval)
+        .apply(lambda x: [d["name"] for d in x] if isinstance(x, list) else [])
     )
-    smd = smd.merge(keywords_parsed, on='id', how='left')
-    smd['keywords'] = smd['keywords'].fillna('').apply(lambda x: x if isinstance(x, list) else [])
-    smd = smd.merge(credits_parsed, on='id', how='left')
-    smd['cast'] = smd['cast'].fillna('').apply(lambda x: x if isinstance(x, list) else [])
-    smd['director'] = smd['director'].fillna('')
-    smd['overview'] = smd['overview'].fillna('')
+    smd = smd.merge(keywords_parsed, on="id", how="left")
+    smd["keywords"] = (
+        smd["keywords"].fillna("").apply(lambda x: x if isinstance(x, list) else [])
+    )
+    smd = smd.merge(credits_parsed, on="id", how="left")
+    smd["cast"] = (
+        smd["cast"].fillna("").apply(lambda x: x if isinstance(x, list) else [])
+    )
+    smd["director"] = smd["director"].fillna("")
+    smd["overview"] = smd["overview"].fillna("")
 
-    # Ensure numeric columns
-    for col in ['vote_average', 'vote_count', 'popularity']:
-        smd[col] = pd.to_numeric(smd[col], errors='coerce').fillna(0.0)
+    for col in ["vote_average", "vote_count", "popularity"]:
+        smd[col] = pd.to_numeric(smd[col], errors="coerce").fillna(0.0)
 
-    # Enrich with decade, language, collection
-    smd['decade'] = smd['release_date'].apply(parse_decade)
-    smd['language'] = smd['original_language'].apply(parse_language)
-    smd['collection'] = smd['belongs_to_collection'].apply(parse_collection)
+    smd["decade"] = smd["release_date"].apply(parse_decade)
+    smd["language"] = smd["original_language"].apply(parse_language)
+    smd["collection"] = smd["belongs_to_collection"].apply(parse_collection)
 
-    smd = smd[smd['title'].notna()]
+    smd = smd[smd["title"].notna()]
     return smd
 
 
-def make_dataset(raw_dir='data/raw', processed_dir='data/processed'):
+def make_dataset(raw_dir="data/raw", processed_dir="data/processed"):
     """Full pipeline: load, clean, parse, merge, save."""
-    metadata, credits, keywords, links_small, ratings = load_raw_data(raw_dir)
+    metadata, credits, keywords, links_small = load_raw_data(raw_dir)
     smd = clean_metadata(metadata, links_small)
     credits_parsed = parse_credits(credits)
     keywords_parsed = parse_keywords(keywords)
     smd = merge_datasets(smd, credits_parsed, keywords_parsed)
 
+    # Use fetched poster URLs from cache if available, else build from raw poster_path
+    poster_cache = Path(processed_dir) / "poster_cache.csv"
+    if poster_cache.exists():
+        cache_df = pd.read_csv(poster_cache)
+        cache_df = cache_df[cache_df["poster_url"].notna() & (cache_df["poster_url"] != "")]
+        poster_map = dict(zip(cache_df["id"].astype(int), cache_df["poster_url"]))
+        smd["poster_url"] = smd["id"].astype(int).map(poster_map).fillna("")
+        print(f"Loaded {len(poster_map)} poster URLs from cache")
+    elif "poster_path" in smd.columns:
+        smd["poster_url"] = smd["poster_path"].apply(build_poster_url)
+    else:
+        smd["poster_url"] = ""
+
     processed_dir = Path(processed_dir)
     processed_dir.mkdir(parents=True, exist_ok=True)
 
-    cols = ['id', 'title', 'overview', 'genres', 'keywords', 'cast', 'director',
-            'vote_average', 'vote_count', 'popularity', 'decade', 'language', 'collection']
+    cols = [
+        "id",
+        "title",
+        "overview",
+        "genres",
+        "keywords",
+        "cast",
+        "director",
+        "vote_average",
+        "vote_count",
+        "popularity",
+        "decade",
+        "language",
+        "collection",
+        "poster_url",
+    ]
 
-    # Preserve poster_url from existing processed CSV if available
-    out_path = processed_dir / 'movies_processed.csv'
-    if out_path.exists():
-        existing = pd.read_csv(out_path)
-        if 'poster_url' in existing.columns:
-            poster_map = existing.drop_duplicates(subset='id').set_index('id')['poster_url']
-            smd['poster_url'] = smd['id'].map(poster_map).fillna('')
-            cols.append('poster_url')
-
+    out_path = processed_dir / "movies_processed.csv"
     smd[cols].to_csv(out_path, index=False)
     print(f"Saved {len(smd)} movies to {processed_dir / 'movies_processed.csv'}")
     return smd
 
 
-if __name__ == '__main__':
+def load_ratings(raw_dir: str = "data/raw") -> pd.DataFrame:
+    """Load MovieLens ratings mapped to TMDB IDs.
+
+    Joins ratings_small.csv with links_small.csv to get tmdbId for each rating.
+    Returns DataFrame with columns: userId, tmdbId, rating.
+    """
+    raw_dir = Path(raw_dir)
+    ratings = pd.read_csv(raw_dir / "ratings_small.csv")
+    links = pd.read_csv(raw_dir / "links_small.csv")
+
+    links = links[links["tmdbId"].notna()].copy()
+    links["tmdbId"] = links["tmdbId"].astype(int)
+
+    merged = ratings.merge(links[["movieId", "tmdbId"]], on="movieId", how="inner")
+    return merged[["userId", "tmdbId", "rating"]]
+
+
+if __name__ == "__main__":
     make_dataset()

@@ -5,11 +5,12 @@ Sequential requests with randomized delays and rotating headers.
 Usage:
     uv run python -m src.data.fetch_posters
 """
+
 import random
 import re
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from http.cookiejar import CookieJar
 from pathlib import Path
 
@@ -27,17 +28,16 @@ USER_AGENTS = [
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.7; rv:133.0) Gecko/20100101 Firefox/133.0",
 ]
 
-DELAY_MIN = 2.0       # min seconds between requests
-DELAY_MAX = 4.0       # max seconds between requests
-BACKOFF_BASE = 60     # initial backoff on 429
-BACKOFF_MAX = 600     # max backoff
-TIMEOUT = 15          # request timeout
-SAVE_EVERY = 20       # save cache after this many fetches
+DELAY_MIN = 2.0
+DELAY_MAX = 4.0
+BACKOFF_BASE = 60
+BACKOFF_MAX = 600
+TIMEOUT = 15
+SAVE_EVERY = 20
 
 CACHE_PATH = Path("data/processed/poster_cache.csv")
 PROCESSED_PATH = Path("data/processed/movies_processed.csv")
 
-# Persistent cookie jar + opener
 _cookie_jar = CookieJar()
 _opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(_cookie_jar))
 
@@ -57,7 +57,10 @@ def _random_headers() -> dict[str, str]:
 
 
 def fetch_one(movie_id: int) -> str | None:
-    """Fetch poster URL for one movie. Returns URL, empty string (no poster), or None (error/rate-limited)."""
+    """Fetch poster URL for one movie.
+
+    Returns URL string, empty string (no poster), or None (error/rate-limited).
+    """
     url = TMDB_URL.format(movie_id=movie_id)
     try:
         req = urllib.request.Request(url, headers=_random_headers())
@@ -67,9 +70,9 @@ def fetch_one(movie_id: int) -> str | None:
         return match.group(1) if match else ""
     except urllib.error.HTTPError as e:
         if e.code == 429:
-            return None  # rate limited
+            return None
         if e.code == 404:
-            return ""    # movie doesn't exist
+            return ""
         return None
     except (urllib.error.URLError, TimeoutError, OSError):
         return None
@@ -102,7 +105,7 @@ def main() -> None:
     print(f"Already cached: {len(cache)}")
 
     remaining = [mid for mid in all_ids if mid not in cache]
-    random.shuffle(remaining)  # randomize access order
+    random.shuffle(remaining)
     print(f"Remaining: {len(remaining)}")
 
     if not remaining:
@@ -123,22 +126,23 @@ def main() -> None:
 
     for i, mid in enumerate(remaining):
         result = fetch_one(mid)
-        status = "✓" if result else ("⨯" if result == "" else "⏳ 429")
+        status = "ok" if result else ("miss" if result == "" else "429")
         print(f"  [{i+1}/{len(remaining)}] id={mid} {status}", flush=True)
 
         if result is None:
             consecutive_fails += 1
             backoff = min(max(backoff * 2, BACKOFF_BASE), BACKOFF_MAX)
-            print(f"  [{i+1}/{len(remaining)}] id={mid} — rate limited, "
-                  f"backing off {backoff}s...")
+            print(
+                f"  [{i+1}/{len(remaining)}] id={mid} — rate limited, "
+                f"backing off {backoff}s..."
+            )
             save_cache(cache)
             time.sleep(backoff)
-            # Retry once
             result = fetch_one(mid)
             if result is None:
                 skipped += 1
                 if consecutive_fails >= 5:
-                    print(f"  5 consecutive failures — pausing 10min...")
+                    print("  5 consecutive failures — pausing 10min...")
                     time.sleep(600)
                     consecutive_fails = 0
                 continue
@@ -159,10 +163,11 @@ def main() -> None:
         if fetched % SAVE_EVERY == 0:
             save_cache(cache)
             pct = (i + 1) / len(remaining) * 100
-            print(f"  [{i+1}/{len(remaining)}] {pct:.1f}% — "
-                  f"{found} posters, {skipped} missing")
+            print(
+                f"  [{i+1}/{len(remaining)}] {pct:.1f}% — "
+                f"{found} posters, {skipped} missing"
+            )
 
-        # Randomized delay
         time.sleep(random.uniform(DELAY_MIN, DELAY_MAX))
 
     save_cache(cache)
