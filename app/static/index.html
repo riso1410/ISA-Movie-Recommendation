@@ -572,36 +572,6 @@
         margin-bottom: 16px;
         color: rgba(255, 255, 255, 0.8);
       }
-      .genre-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-      }
-      .genre-table th {
-        padding: 10px 12px;
-        text-align: left;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.45);
-        font-size: 11px;
-        text-transform: uppercase;
-        font-weight: 600;
-      }
-      .genre-table td {
-        padding: 9px 12px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        color: rgba(255, 255, 255, 0.85);
-      }
-      .genre-bar-wrap {
-        background: rgba(255, 255, 255, 0.08);
-        border-radius: 4px;
-        height: 6px;
-        width: 100%;
-      }
-      .genre-bar {
-        height: 6px;
-        border-radius: 4px;
-        background: linear-gradient(90deg, #ff6b6b, #ee5a24);
-      }
       .glass-card {
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -852,18 +822,53 @@
       const METRIC_META = {
         precision_at_k: {
           label: "Precision@5",
-          desc: "Fraction of top-5 recommendations sharing at least one genre with the query movie",
+          desc: "Fraction of top-5 recs that are in the held-out test set (ratings-based leave-N-out)",
           color: "#51cf66",
         },
         ndcg_at_k: {
           label: "NDCG@5",
-          desc: "Normalized Discounted Cumulative Gain — ranking quality weighted by genre overlap relevance",
+          desc: "Normalized Discounted Cumulative Gain — measures ranking quality with position-aware weighting",
           color: "#74c0fc",
         },
         map_at_k: {
           label: "MAP@5",
-          desc: "Mean Average Precision — considers the rank position of each relevant item, not just count",
+          desc: "Mean Average Precision — average of precision at each relevant item's rank position",
           color: "#f06595",
+        },
+        mrr: {
+          label: "MRR@5",
+          desc: "Mean Reciprocal Rank — how quickly the first relevant item appears (1/rank)",
+          color: "#ffd43b",
+        },
+        hit_rate: {
+          label: "HR@5",
+          desc: "Hit Rate — fraction of users who received at least one relevant recommendation",
+          color: "#ff922b",
+        },
+        coverage: {
+          label: "Coverage",
+          desc: "Fraction of the movie catalog that appears in any recommendation list",
+          color: "#a9e34b",
+        },
+        ild: {
+          label: "ILD",
+          desc: "Intra-List Diversity — average dissimilarity between recommended items (1 - cosine sim)",
+          color: "#66d9e8",
+        },
+        novelty: {
+          label: "Novelty",
+          desc: "Average inverse popularity of recommended items (-log2 of normalized popularity)",
+          color: "#da77f2",
+        },
+        serendipity: {
+          label: "Serendipity",
+          desc: "Fraction of relevant recs that are NOT in the popularity baseline — unexpected but useful",
+          color: "#e599f7",
+        },
+        calibration_score: {
+          label: "Calibration",
+          desc: "Genre distribution match between user preferences and recommendations (Steck 2018). Higher = better calibrated",
+          color: "#20c997",
         },
       };
 
@@ -1004,27 +1009,19 @@
             ...meta,
           }));
 
-        const genrePrec = metrics.per_genre_precision || {};
-        const sortedGenres = Object.entries(genrePrec).sort(
-          (a, b) => b[1] - a[1],
-        );
-        const maxGenrePrec = sortedGenres.length > 0
-          ? Math.max(...sortedGenres.map(([, v]) => v))
-          : 1;
-
         return (
           <div className="analysis-container">
             <SessionMetrics />
             <div className="section-title">
-              Recommendation System Metrics (K=5)
+              Offline Evaluation Metrics (K=5, Ratings-Based Leave-N-Out + Calibration)
             </div>
             <div className="metric-grid">
               {mainMetrics.map((m) => {
-                const isPercent = m.value <= 1.0 && m.key !== "novelty";
-                const displayVal = isPercent
+                const isRatio = ["precision_at_k", "ndcg_at_k", "map_at_k", "mrr", "hit_rate", "coverage", "ild", "serendipity", "calibration_score"].includes(m.key);
+                const displayVal = isRatio
                   ? (m.value * 100).toFixed(1) + "%"
                   : m.value.toFixed(2);
-                const barWidth = isPercent
+                const barWidth = isRatio
                   ? m.value * 100
                   : Math.min((m.value / 10) * 100, 100);
 
@@ -1049,41 +1046,8 @@
               })}
             </div>
 
-            {sortedGenres.length > 0 && (
-              <div className="glass-card">
-                <div className="section-title">
-                  Precision@5 by Genre
-                </div>
-                <table className="genre-table">
-                  <thead>
-                    <tr>
-                      <th>Genre</th>
-                      <th style={{ width: "80px" }}>Precision</th>
-                      <th style={{ width: "40%" }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedGenres.map(([genre, prec]) => (
-                      <tr key={genre}>
-                        <td>{genre}</td>
-                        <td>{(prec * 100).toFixed(1)}%</td>
-                        <td>
-                          <div className="genre-bar-wrap">
-                            <div
-                              className="genre-bar"
-                              style={{
-                                width:
-                                  (prec / maxGenrePrec) * 100 + "%",
-                              }}
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+
+
           </div>
         );
       }

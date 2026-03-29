@@ -162,19 +162,42 @@ The profile vector is L2-normalized, then cosine similarity is computed against 
 
 ## Evaluation
 
-The system is evaluated with these metrics (using genre overlap as proxy for relevance):
+The system uses two evaluation approaches:
+
+### Primary: Ratings-Based Leave-N-Out
+
+Uses **real MovieLens user ratings** as ground truth — the most rigorous evaluation. For each of 200 sampled users:
+1. Collect all movies rated >= 4.0 (liked)
+2. Split 70% into a profile (train set), hold out 30% as test
+3. Generate top-K recommendations from the profile using `recommend_from_profile`
+4. Check how many held-out movies appear in top-K
 
 | Metric                   | What it measures                                                                       |
 | ------------------------ | -------------------------------------------------------------------------------------- |
-| **Precision@K**          | Fraction of top-K recs sharing at least one genre with the query movie                 |
-| **NDCG@K**               | Whether recs with more genre overlap appear higher in the list                         |
-| **Coverage**             | What fraction of the catalog ever gets recommended                                     |
+| **Precision@K**          | Fraction of top-K recs that are in the held-out test set                               |
+| **Recall@K**             | Fraction of test-set items that appear in top-K                                        |
+| **NDCG@K**               | Ranking quality — relevant items ranked higher score better (position-aware)           |
+| **MAP@K**                | Mean average precision — precision at each relevant item's rank position               |
+| **MRR@K**                | Mean reciprocal rank — 1/rank of the first relevant item                               |
+| **HR@K**                 | Hit rate — fraction of users who received at least one relevant recommendation         |
+| **Coverage**             | What fraction of the catalog ever gets recommended to any user                         |
 | **Intra-List Diversity** | How different the recommended movies are from each other (1 - avg pairwise similarity) |
-| **Novelty**              | Whether the system recommends lesser-known movies (inverse log popularity)             |
-| **Serendipity**          | Relevant AND unexpected recommendations (relevant \* (1 - popularity))                 |
-| **MRR**                  | How quickly a relevant movie appears in the list (1/rank of first relevant)            |
+| **Novelty**              | Average self-information of recommended items (-log2 of normalized popularity)         |
+| **Serendipity**          | Fraction of relevant recs NOT in the popularity baseline — unexpected but useful       |
 
-A **grid search** can tune the field weights (genres, keywords, director, collection) by optimizing 0.5 _ Precision@K + 0.5 _ NDCG@K.
+### Calibration (Steck, RecSys 2018)
+
+Measures whether the **genre distribution** of recommendations matches the user's preference distribution. A system can have high Precision@K but terrible calibration — e.g., a user who watches 60% drama / 40% comedy gets 100% drama recs.
+
+| Metric                | Range      | Interpretation                                                     |
+| --------------------- | ---------- | ------------------------------------------------------------------ |
+| **KL Divergence**     | [0, +inf)  | Information-theoretic distance between user and rec distributions  |
+| **JSD**               | [0, 1]     | Jensen-Shannon divergence — symmetric and bounded                  |
+| **Calibration Score** | [0, 1]     | 1 - JSD — higher = better calibrated                              |
+
+### Grid Search
+
+Tunes field weights (genres, keywords, director, collection) by optimizing a combined score: `0.4*NDCG@K + 0.3*Precision@K + 0.15*ILD + 0.15*Novelty`.
 
 ---
 

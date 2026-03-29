@@ -22,7 +22,7 @@ from pydantic import BaseModel
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.models.predict_model import ContentBasedRecommender, MODES, MODE_LABELS
+from src.models.predict_model import ContentBasedRecommender, MODE_LABELS
 
 app = FastAPI(title="Movie Swipe Recommender")
 
@@ -578,7 +578,11 @@ def get_session_analytics():
 
 @app.get("/api/analytics/offline")
 def get_offline_analytics():
-    """Run offline evaluation metrics (cached after first call)."""
+    """Run offline evaluation metrics (cached after first call).
+
+    Uses ratings-based evaluation (leave-N-out with real MovieLens ratings)
+    as the primary method, plus genre-based per-genre precision as diagnostic.
+    """
     global offline_cache
     if offline_cache is not None:
         return offline_cache
@@ -588,18 +592,15 @@ def get_offline_analytics():
 
     from src.models.evaluate_model import evaluate_all
 
-    smd = recommender.smd
-    test = smd[smd["vote_count"] >= smd["vote_count"].quantile(0.6)].sample(
-        n=min(100, len(smd)), random_state=42
-    )
-
-    results = evaluate_all(recommender, test, k=5)
+    results = evaluate_all(recommender, k=5)
     serialized = {}
-    for k, v in results.items():
-        if isinstance(v, dict):
-            serialized[k] = {sk: round(float(sv), 4) for sk, sv in v.items()}
+    for key, val in results.items():
+        if isinstance(val, dict):
+            serialized[key] = {sk: round(float(sv), 4) for sk, sv in val.items()}
+        elif isinstance(val, (int, np.integer)):
+            serialized[key] = int(val)
         else:
-            serialized[k] = round(float(v), 4)
+            serialized[key] = round(float(val), 4)
 
     offline_cache = serialized
     return offline_cache

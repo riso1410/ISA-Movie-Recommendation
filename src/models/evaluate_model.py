@@ -3,16 +3,19 @@ Evaluation metrics for content-based recommender.
 
 Two evaluation modes:
   1. Ratings-based (primary): Leave-N-out with real MovieLens user ratings as ground truth.
-  2. Genre-based (diagnostic): Genre overlap proxy — kept for coherence diagnostics only.
-
-Metrics: Precision@K, Recall@K, NDCG@K, MAP@K, MRR, HR@K, Coverage, ILD, Novelty, Serendipity.
+     Metrics: Precision@K, Recall@K, NDCG@K, MAP@K, MRR, HR@K, Coverage, ILD, Novelty,
+     Serendipity.
+  2. Calibration (Steck 2018): Measures whether the genre/decade distribution of
+     recommendations matches the user's preference distribution.
+     Metrics: KL-divergence, Jensen-Shannon divergence, Calibration Score.
 """
 
 import sys
+from collections import Counter
+from itertools import product
+
 import numpy as np
 import pandas as pd
-from itertools import product
-from sklearn.metrics.pairwise import cosine_similarity
 
 from src.data.make_dataset import make_dataset, load_ratings
 from src.features.build_features import build_features
@@ -20,12 +23,12 @@ from src.models.predict_model import ContentBasedRecommender, DEFAULT_WEIGHTS
 
 
 # ---------------------------------------------------------------------------
-# Ratings-based evaluation (primary)
+# Shared helpers
 # ---------------------------------------------------------------------------
 
 
 def _build_tmdb_to_idx(recommender: ContentBasedRecommender) -> dict[int, int]:
-    """Map TMDB movie ID → index in recommender.smd."""
+    """Map TMDB movie ID -> index in recommender.smd."""
     mapping = {}
     for idx, movie_id in enumerate(recommender.smd["id"].values):
         try:
@@ -92,6 +95,11 @@ def _prepare_user_profiles(
     return profiles
 
 
+# ---------------------------------------------------------------------------
+# Ratings-based evaluation (primary)
+# ---------------------------------------------------------------------------
+
+
 def evaluate_with_ratings(
     recommender: ContentBasedRecommender,
     k_values: list[int] | None = None,
@@ -108,7 +116,7 @@ def evaluate_with_ratings(
         k_values = [5, 10]
     max_k = max(k_values)
 
-    print(f"  Preparing user profiles...")
+    print("  Preparing user profiles...")
     profiles = _prepare_user_profiles(recommender, n_users=n_users)
     print(f"  Evaluating {len(profiles)} users at K={k_values}...")
 
@@ -229,249 +237,165 @@ def evaluate_with_ratings(
 
 
 # ---------------------------------------------------------------------------
-# Genre-based evaluation (diagnostic — kept for coherence checks)
+# Calibration evaluation (Steck 2018)
 # ---------------------------------------------------------------------------
 
 
-def _genre_overlap(genres_a: list, genres_b: list) -> int:
-    """Count genre overlap between two genre lists."""
-    return len(set(genres_a) & set(genres_b))
+def _get_genre_distribution(smd: pd.DataFrame, indices: list[int]) -> dict[str, float]:
+    """Return normalized genre frequency distribution for a set of movie indices."""
+    counts: Counter = Counter()
+    for idx in indices:
+        genres = smd.iloc[idx]["genres"]
+        if isinstance(genres, list):
+            counts.update(genres)
+    total = sum(counts.values())
+    return {g: c / total for g, c in counts.items()} if total > 0 else {}
 
 
-def genre_precision_at_k(
-    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 5
-) -> float:
-    """Genre-overlap-based Precision@K averaged over test movies (diagnostic)."""
-    precisions = []
-
-    for _, row in test_movies.iterrows():
-        title = row["title"]
-        true_genres = row["genres"] if isinstance(row["genres"], list) else []
-        if not true_genres:
-            continue
-
-        recs = recommender.recommend(title, n=k)
-        if recs.empty:
-            continue
-
-        relevant = 0
-        for _, rec_row in recs.iterrows():
-            rec_genres = (
-                rec_row["genres"] if isinstance(rec_row["genres"], list) else []
-            )
-            if _genre_overlap(true_genres, rec_genres) > 0:
-                relevant += 1
-
-        precisions.append(relevant / k)
-
-    return float(np.mean(precisions)) if precisions else 0.0
+def _kl_divergence(p: np.ndarray, q: np.ndarray) -> float:
+    """KL(p || q) with numerical stability."""
+    mask = p > 0
+    return float(np.sum(p[mask] * np.log(p[mask] / (q[mask] + 1e-10))))
 
 
-def genre_ndcg_at_k(
-    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 5
-) -> float:
-    """NDCG@K using genre overlap count as relevance score (diagnostic)."""
-    from sklearn.metrics import ndcg_score
-
-    ndcg_scores = []
-
-    for _, row in test_movies.iterrows():
-        title = row["title"]
-        true_genres = row["genres"] if isinstance(row["genres"], list) else []
-        if not true_genres:
-            continue
-
-        recs = recommender.recommend(title, n=k)
-        if recs.empty:
-            continue
-
-        relevances = []
-        for _, rec_row in recs.iterrows():
-            rec_genres = (
-                rec_row["genres"] if isinstance(rec_row["genres"], list) else []
-            )
-            relevances.append(_genre_overlap(true_genres, rec_genres))
-
-        while len(relevances) < k:
-            relevances.append(0)
-
-        if max(relevances) == 0:
-            continue
-
-        true_relevance = np.array([sorted(relevances, reverse=True)])
-        pred_relevance = np.array([relevances])
-        ndcg_scores.append(ndcg_score(true_relevance, pred_relevance, k=k))
-
-    return float(np.mean(ndcg_scores)) if ndcg_scores else 0.0
-
-
-def genre_coverage(
+def evaluate_calibration(
     recommender: ContentBasedRecommender,
-    test_movies: pd.DataFrame,
-    catalog_size: int,
-    k: int = 5,
-) -> float:
-    """Fraction of catalog appearing in any recommendation list."""
-    all_rec_titles = set()
+    k: int = 10,
+    n_users: int = 200,
+    alpha_smooth: float = 0.01,
+    alpha: float = 0.7,
+    mmr_lambda: float = 0.5,
+) -> dict:
+    """Calibration evaluation (Steck, RecSys 2018).
 
-    for _, row in test_movies.iterrows():
-        recs = recommender.recommend(row["title"], n=k)
-        if not recs.empty:
-            all_rec_titles.update(recs["title"].tolist())
+    Measures whether the genre distribution of recommendations matches
+    the user's preference distribution. Uses Jensen-Shannon divergence
+    (bounded, symmetric) as the primary metric.
 
-    return len(all_rec_titles) / catalog_size if catalog_size > 0 else 0.0
+    Lower divergence = better calibrated recommendations.
+    """
+    print("  Preparing user profiles for calibration...")
+    profiles = _prepare_user_profiles(recommender, n_users=n_users)
+    print(f"  Evaluating calibration for {len(profiles)} users at K={k}...")
 
+    if not profiles:
+        print("  ERROR: No qualifying user profiles found.")
+        return {}
 
-def genre_intra_list_diversity(
-    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 5
-) -> float:
-    """Average (1 - mean pairwise cosine similarity) within recommendation lists."""
-    cosine_sim = recommender.cosine_sim
-    if cosine_sim is None:
-        raise RuntimeError("Recommender must be fitted before evaluation")
+    all_kl = []
+    all_jsd = []
+    genre_over_representation: Counter = Counter()
+    genre_under_representation: Counter = Counter()
 
-    diversities = []
+    smd = recommender.smd
 
-    for _, row in test_movies.iterrows():
-        title = row["title"]
-        recs = recommender.recommend(title, n=k)
-        if len(recs) < 2:
+    for profile in profiles:
+        profile_idx = profile["profile_indices"]
+
+        # User preference distribution (from profile movies)
+        user_dist = _get_genre_distribution(smd, profile_idx)
+        if not user_dist:
             continue
 
-        rec_titles = recs["title"].tolist()
-        rec_indices = []
-        for t in rec_titles:
-            if t in recommender.indices:
-                rec_indices.append(recommender.indices[t])
-
-        if len(rec_indices) < 2:
-            continue
-
-        sub_sim = cosine_sim[np.ix_(rec_indices, rec_indices)]
-        n_items = len(rec_indices)
-        upper_mask = np.triu_indices(n_items, k=1)
-        mean_sim = sub_sim[upper_mask].mean()
-        diversities.append(1.0 - mean_sim)
-
-    return float(np.mean(diversities)) if diversities else 0.0
-
-
-def genre_novelty(
-    recommender: ContentBasedRecommender,
-    test_movies: pd.DataFrame,
-    popularity_scores: pd.Series,
-    k: int = 5,
-) -> float:
-    """Average inverse popularity (self-information) of recommended items."""
-    pop_max = popularity_scores.max()
-    if pop_max == 0:
-        return 0.0
-
-    pop_norm = popularity_scores / pop_max
-    pop_by_title = pd.Series(pop_norm.values, index=recommender.smd["title"])
-    pop_by_title = pop_by_title[~pop_by_title.index.duplicated(keep="first")]
-
-    novelty_scores = []
-
-    for _, row in test_movies.iterrows():
-        recs = recommender.recommend(row["title"], n=k)
-        if recs.empty:
-            continue
-
-        for _, rec_row in recs.iterrows():
-            p = float(pop_by_title.get(rec_row["title"], 0.5))
-            novelty_scores.append(-np.log2(max(p, 1e-10)))
-
-    return float(np.mean(novelty_scores)) if novelty_scores else 0.0
-
-
-def genre_map_at_k(
-    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 5
-) -> float:
-    """MAP@K with genre overlap as relevance (diagnostic). Fixed denominator."""
-    ap_scores = []
-
-    for _, row in test_movies.iterrows():
-        title = row["title"]
-        true_genres = row["genres"] if isinstance(row["genres"], list) else []
-        if not true_genres:
-            continue
-
-        recs = recommender.recommend(title, n=k)
-        if recs.empty:
-            continue
-
-        # Count total relevant items in catalog for this query (capped at k)
-        all_genres = recommender.smd["genres"]
-        total_relevant = sum(
-            1 for g in all_genres
-            if isinstance(g, list) and _genre_overlap(true_genres, g) > 0
+        # Recommendation distribution
+        rec_indices, _ = recommender.recommend_from_profile(
+            profile_idx, n=k, alpha=alpha, mmr_lambda=mmr_lambda,
         )
-        total_relevant -= 1  # exclude the query movie itself
-
-        hits = 0
-        sum_precisions = 0.0
-        for rank, (_, rec_row) in enumerate(recs.iterrows(), 1):
-            rec_genres = (
-                rec_row["genres"] if isinstance(rec_row["genres"], list) else []
-            )
-            if _genre_overlap(true_genres, rec_genres) > 0:
-                hits += 1
-                sum_precisions += hits / rank
-
-        denom = min(k, total_relevant) if total_relevant > 0 else 1
-        ap_scores.append(sum_precisions / denom)
-
-    return float(np.mean(ap_scores)) if ap_scores else 0.0
-
-
-def genre_mrr(
-    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 5
-) -> float:
-    """MRR with genre overlap as relevance (diagnostic)."""
-    rr_scores = []
-
-    for _, row in test_movies.iterrows():
-        title = row["title"]
-        true_genres = row["genres"] if isinstance(row["genres"], list) else []
-        if not true_genres:
+        if not rec_indices:
             continue
 
-        recs = recommender.recommend(title, n=k)
-        if recs.empty:
+        rec_dist = _get_genre_distribution(smd, rec_indices)
+        if not rec_dist:
             continue
 
-        for rank, (_, rec_row) in enumerate(recs.iterrows(), 1):
-            rec_genres = (
-                rec_row["genres"] if isinstance(rec_row["genres"], list) else []
-            )
-            if _genre_overlap(true_genres, rec_genres) > 0:
-                rr_scores.append(1.0 / rank)
-                break
-        else:
-            rr_scores.append(0.0)
+        # Align distributions to the same genre set
+        all_genres = sorted(set(user_dist) | set(rec_dist))
+        p = np.array([user_dist.get(g, 0.0) for g in all_genres])
+        q = np.array([rec_dist.get(g, 0.0) for g in all_genres])
 
-    return float(np.mean(rr_scores)) if rr_scores else 0.0
+        # Smooth q to avoid log(0)
+        q_smooth = (1 - alpha_smooth) * q + alpha_smooth * p
 
+        # Re-normalize after smoothing
+        q_smooth = q_smooth / q_smooth.sum() if q_smooth.sum() > 0 else q_smooth
 
-def genre_evaluate_all(
-    recommender: ContentBasedRecommender, test_movies: pd.DataFrame, k: int = 5
-) -> dict[str, float]:
-    """Run all genre-based diagnostic metrics."""
-    catalog_size = len(recommender.smd)
-    pop_scores = pd.to_numeric(
-        recommender.smd["popularity"], errors="coerce"
-    ).fillna(0.0)
+        # KL divergence: KL(p || q_smooth)
+        kl = _kl_divergence(p, q_smooth)
+        all_kl.append(kl)
+
+        # Jensen-Shannon divergence (symmetric, bounded [0, 1])
+        m = 0.5 * (p + q_smooth)
+        jsd = 0.5 * _kl_divergence(p, m) + 0.5 * _kl_divergence(q_smooth, m)
+        all_jsd.append(jsd)
+
+        # Track per-genre miscalibration (rec_proportion - user_proportion)
+        for i, g in enumerate(all_genres):
+            diff = q[i] - p[i]
+            if diff > 0.05:
+                genre_over_representation[g] += 1
+            elif diff < -0.05:
+                genre_under_representation[g] += 1
+
+    if not all_kl:
+        return {}
+
+    # Per-genre miscalibration summary (top over/under represented)
+    n_evaluated = len(all_kl)
+    miscalibration = {}
+    for g, count in genre_over_representation.most_common(5):
+        miscalibration[g] = round(count / n_evaluated, 4)
 
     return {
-        "genre_precision_at_k": genre_precision_at_k(recommender, test_movies, k),
-        "genre_ndcg_at_k": genre_ndcg_at_k(recommender, test_movies, k),
-        "genre_map_at_k": genre_map_at_k(recommender, test_movies, k),
-        "genre_mrr": genre_mrr(recommender, test_movies, k),
-        "genre_coverage": genre_coverage(recommender, test_movies, catalog_size, k),
-        "genre_ild": genre_intra_list_diversity(recommender, test_movies, k),
-        "genre_novelty": genre_novelty(recommender, test_movies, pop_scores, k),
+        "calibration_kl": round(float(np.mean(all_kl)), 4),
+        "calibration_kl_std": round(float(np.std(all_kl)), 4),
+        "calibration_jsd": round(float(np.mean(all_jsd)), 4),
+        "calibration_jsd_std": round(float(np.std(all_jsd)), 4),
+        "calibration_score": round(1.0 - float(np.mean(all_jsd)), 4),
+        "n_users": n_evaluated,
+        "genre_over_represented": miscalibration,
     }
+
+
+# ---------------------------------------------------------------------------
+# Combined evaluation (used by web app offline analytics)
+# ---------------------------------------------------------------------------
+
+
+def evaluate_all(
+    recommender: ContentBasedRecommender,
+    k: int = 5,
+) -> dict:
+    """Run ratings-based and calibration evaluation, return unified results.
+
+    Returns dict with keys matching the frontend METRIC_META format:
+      - precision_at_k, ndcg_at_k, map_at_k, mrr, hit_rate (from ratings-based @k)
+      - coverage, ild, novelty, serendipity (system-level from ratings-based)
+      - calibration_score, calibration_jsd, calibration_kl (from calibration eval)
+    """
+    results = {}
+
+    # Primary: ratings-based evaluation at requested K
+    ratings = evaluate_with_ratings(recommender, k_values=[k], n_users=200)
+    if ratings:
+        results["precision_at_k"] = ratings.get(f"precision@{k}", 0.0)
+        results["ndcg_at_k"] = ratings.get(f"ndcg@{k}", 0.0)
+        results["map_at_k"] = ratings.get(f"map@{k}", 0.0)
+        results["mrr"] = ratings.get(f"mrr@{k}", 0.0)
+        results["hit_rate"] = ratings.get(f"hit_rate@{k}", 0.0)
+        results["coverage"] = ratings.get("coverage", 0.0)
+        results["ild"] = ratings.get("ild", 0.0)
+        results["novelty"] = ratings.get("novelty", 0.0)
+        results["serendipity"] = ratings.get("serendipity", 0.0)
+        results["n_users"] = ratings.get("n_users", 0)
+
+    # Calibration evaluation (Steck 2018)
+    cal = evaluate_calibration(recommender, k=k)
+    if cal:
+        results["calibration_score"] = cal.get("calibration_score", 0.0)
+        results["calibration_jsd"] = cal.get("calibration_jsd", 0.0)
+        results["calibration_kl"] = cal.get("calibration_kl", 0.0)
+
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -584,16 +508,16 @@ if __name__ == "__main__":
             else:
                 print(f"  {metric}: {value}")
 
-    # --- Diagnostic: genre-based evaluation ---
-    print("\n=== Genre-Based Evaluation (Diagnostic) ===")
-    test = smd.sample(n=min(100, len(smd)), random_state=42)
+    # --- Calibration evaluation (Steck 2018) ---
+    print("\n=== Calibration Evaluation (Steck 2018) ===")
+    cal_results = evaluate_calibration(rec, k=10)
 
-    for k in [5, 10]:
-        print(f"\n  K={k}:")
-        genre_results = genre_evaluate_all(rec, test, k=k)
-        for metric, value in genre_results.items():
-            if isinstance(value, float):
-                print(f"    {metric}: {value:.4f}")
+    if cal_results:
+        print(f"  KL Divergence:     {cal_results['calibration_kl']:.4f} +/- {cal_results['calibration_kl_std']:.4f}")
+        print(f"  JSD:               {cal_results['calibration_jsd']:.4f} +/- {cal_results['calibration_jsd_std']:.4f}")
+        print(f"  Calibration Score: {cal_results['calibration_score']:.4f} (1 - JSD, higher = better)")
+        if cal_results.get("genre_over_represented"):
+            print(f"  Over-represented genres: {cal_results['genre_over_represented']}")
 
     # --- Optional: grid search ---
     if run_grid:
@@ -601,6 +525,6 @@ if __name__ == "__main__":
         grid_results = grid_search_weights(smd, n_users=100)
         print(f"\n  Best weights: {grid_results['best_weights']}")
         print(f"  Best score: {grid_results['best_score']:.4f}")
-        print(f"\n  Top 5 configurations:")
+        print("\n  Top 5 configurations:")
         for r in grid_results["results"][:5]:
             print(f"    {r}")
